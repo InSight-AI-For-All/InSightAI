@@ -1,4 +1,24 @@
-# Byte-compiled / optimized / DLL files
+# dependencies
+/node_modules
+
+# Next.js
+/.next
+/out
+
+# testing
+/coverage
+
+# production
+/build
+
+# local environment files
+.env*
+!.env.example
+
+# logs and editor files
+npm-debug.log*
+*.tsbuildinfo
+.DS_Store# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class

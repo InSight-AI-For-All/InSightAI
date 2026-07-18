@@ -14,5 +14,5 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
   const check = await getFactCheck(user.id, id);
   if (!check) notFound();
 
-  return <><header className="page-heading"><div><Link href="/history" className="muted" style={{ display: "inline-flex", gap: 7, alignItems: "center" }}><ArrowLeft size={16} /> History</Link><h1>Your InSight</h1><p>Evidence-assisted analysis with the uncertainty left visible.</p></div><Link className="button" href="/check"><Plus size={17} /> New check</Link></header><ResultView check={check} /></>;
+  return <><header className="page-heading"><div><Link href="/history" className="result-back"><ArrowLeft size={16} /> Your checks</Link><h1>Your InSight is ready.</h1><p>The score, context, and uncertainty — all in one place.</p></div><Link className="button secondary" href="/check"><Plus size={17} /> Check another</Link></header><ResultView check={check} /></>;
 }

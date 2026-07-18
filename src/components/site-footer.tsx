@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Brand } from "@/components/brand";
+import { getCurrentUser } from "@/lib/auth";
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const user = await getCurrentUser();
   return (
     <footer className="site-footer">
       <div className="container footer-inner">
@@ -14,7 +16,7 @@ export function SiteFooter() {
         <div className="footer-links">
           <Link href="/pricing">Pricing</Link>
           <Link href="/terms">Terms &amp; safety</Link>
-          <Link href="/login">Sign in</Link>
+          <Link href={user ? "/dashboard" : "/login"}>{user ? "Dashboard" : "Sign in"}</Link>
           <span>© {new Date().getFullYear()} InSight AI</span>
         </div>
       </div>

@@ -13,16 +13,16 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const parameters = await searchParams;
-  const nextPath = parameters.next?.startsWith("/") ? parameters.next : "/dashboard";
+  const nextPath = parameters.next?.startsWith("/") && !parameters.next.startsWith("//") ? parameters.next : "/dashboard";
 
   return (
     <main className="login-page">
       <section className="login-story">
         <Link href="/" className="login-back"><ArrowLeft size={17} /> Back home</Link>
         <div>
-          <p className="eyebrow" style={{ color: "#78e2b4" }}>Your clearer feed starts here</p>
-          <h1>Pause the repost. Check the claim.</h1>
-          <p>One account keeps every analysis, score, and next step ready when you need it.</p>
+          <p className="eyebrow">Your clearer feed starts here</p>
+          <h1>Your feed has questions. Bring them.</h1>
+          <p>Five free checks. Every score, explanation, and next step saved privately.</p>
           <ul>
             <li><Check size={18} /> Five free evidence-assisted checks</li>
             <li><Check size={18} /> Private, searchable history</li>
@@ -34,8 +34,8 @@ export default async function LoginPage({
       <section className="login-form-wrap">
         <div className="login-form">
           <Brand />
-          <h2>Welcome to InSight</h2>
-          <p className="muted">Sign in to check your first post and save the result.</p>
+          <h2>Let&apos;s check that post.</h2>
+          <p className="muted">One tap with Google. No password to remember, no card required.</p>
           {parameters.error && <p className="alert" role="alert">{parameters.error}</p>}
           <GoogleSignIn nextPath={nextPath} configured={hasSupabaseEnvironment()} />
           <p className="login-legal">By continuing, you agree to the <Link href="/terms">terms and safety notice</Link>.</p>

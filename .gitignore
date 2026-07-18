@@ -18,7 +18,9 @@
 # logs and editor files
 npm-debug.log*
 *.tsbuildinfo
-.DS_Store# Byte-compiled / optimized / DLL files
+.DS_Store
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
@@ -34,7 +36,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/

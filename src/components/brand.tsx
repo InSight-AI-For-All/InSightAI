@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ScanSearch } from "lucide-react";
 
-export function Brand() {
+export function Brand({ href = "/" }: { href?: string }) {
   return (
-    <Link className="brand" href="/" aria-label="InSight AI home">
+    <Link className="brand" href={href} aria-label="InSight AI home">
       <span className="brand-mark" aria-hidden="true">
         <ScanSearch size={19} strokeWidth={2.4} />
       </span>

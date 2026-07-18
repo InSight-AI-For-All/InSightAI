@@ -26,7 +26,7 @@ InSight AI is a mobile-first, evidence-assisted fact-checking SaaS foundation. S
 
 ## Local setup
 
-Requirements: Node.js 20.9 or newer, npm, a Supabase project, an OpenAI API key, and optionally Stripe CLI.
+Requirements: Node.js 22.12 or newer, npm, a Supabase project, an OpenAI API key, and optionally Stripe CLI.
 
 1. Run `npm install`.
 2. Copy `.env.example` to `.env.local` (`Copy-Item .env.example .env.local` in PowerShell).

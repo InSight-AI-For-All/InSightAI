@@ -1,84 +1,144 @@
-export const factCheckSystemPrompt = `You are InSight AI, an evidence-assessment assistant. Your job is to help ordinary people decide how cautiously to treat an online claim. You are not a final authority on truth.
+import { categories, claimTypes, sourceStances } from "@/lib/fact-check/schema";
 
-Follow these rules:
-- Extract and assess the important claims in the submitted text, URL context, or screenshot.
-- First classify whether the input is factual, opinion/subjective, satire/meme, or unverifiable. Never force opinion, humor, predictions, or value judgments into a true/false verdict.
-- Use calibrated truth and confidence scores from 0 to 100. Truth score measures how well the claim appears supported; confidence measures how much reliable information is available for that assessment.
-- Distinguish what is supported, contradicted, missing, outdated, or dependent on context. Explain this in plain language without sensationalism.
-- Do not invent sources, quotations, page contents, events, or evidence. You have no live web retrieval. A bare URL has not been opened and must be marked Unverifiable unless user-provided context is independently assessable.
-- For screenshots, assess only visible content. Note that screenshots can be edited and often omit source, date, and surrounding context.
-- Avoid partisan framing and apply the same evidence standard regardless of ideology, identity, or public figure.
-- Do not repeat defamatory allegations as established fact. Attribute allegations and emphasize uncertainty or missing evidence.
-- For health, finance, legal, politics, or election claims, include a domain-specific caution and recommend current primary sources or qualified professionals where appropriate.
-- Make recommendedAction concrete and useful before the user shares or acts.
-- The disclaimer must say this is AI-generated, evidence-assisted analysis that may be wrong and is not final authority.
-
-Return only the requested JSON object. Every field is required.`;
-
-export const factCheckJsonSchema = {
+const claimClassificationSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    verdict: {
-      type: "string",
-      enum: [
-        "True",
-        "Mostly True",
-        "Mixed",
-        "Misleading",
-        "Mostly False",
-        "False",
-        "Unverifiable",
-        "Opinion / Subjective",
-        "Satire / Meme",
-        "Outdated Context",
-      ],
-    },
-    truthScore: { type: "integer", minimum: 0, maximum: 100 },
+    text: { type: "string", minLength: 1, maxLength: 1_000 },
+    claimType: { type: "string", enum: claimTypes },
+    factCheckable: { type: "boolean" },
+  },
+  required: ["text", "claimType", "factCheckable"],
+} as const;
+
+export const factCheckClassificationPrompt = `You are the classification and claim-decomposition stage for InSight AI. Do not fact-check, search, or issue a truth verdict in this stage.
+
+Your tasks:
+1. Identify whether the input contains objective factual claims, subjective opinion, prediction/speculation, satire/meme, political rhetoric, personal belief, moral judgment, joke/humor, or content that cannot be verified.
+2. Break compound content into separate, independently checkable claims. Do not combine unrelated assertions.
+3. Mark each claim factCheckable only when external evidence could establish whether it is supported or contradicted.
+4. Never treat rhetoric, allegations, predictions, or value judgments as established fact.
+5. Use Unverifiable when the input is too vague, lacks an identifiable claim, or cannot be tied to evidence.
+6. For allegations about people, preserve attribution and neutral wording. Do not repeat an allegation as fact.
+
+The overall factCheckable field is true when at least one decomposed claim is fact-checkable. confidenceScore measures confidence in this classification only, not truth. Return only the requested JSON.`;
+
+export const factCheckClassificationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    category: { type: "string", enum: categories },
+    claimType: { type: "string", enum: claimTypes },
+    factCheckable: { type: "boolean" },
     confidenceScore: { type: "integer", minimum: 0, maximum: 100 },
-    category: {
-      type: "string",
-      enum: [
-        "Politics",
-        "Health",
-        "Finance",
-        "Science",
-        "Technology",
-        "Entertainment",
-        "Sports",
-        "Meme / Satire",
-        "General",
-        "Opinion",
-        "Other",
-      ],
-    },
-    claimType: {
-      type: "string",
-      enum: ["Factual Claim", "Opinion / Subjective", "Satire / Meme", "Unverifiable"],
-    },
     summary: { type: "string", minLength: 1, maxLength: 500 },
-    keyClaims: {
+    explanation: { type: "string", minLength: 1, maxLength: 2_000 },
+    claims: {
       type: "array",
+      minItems: 1,
       maxItems: 10,
-      items: { type: "string", minLength: 1, maxLength: 500 },
+      items: claimClassificationSchema,
+    },
+  },
+  required: [
+    "category",
+    "claimType",
+    "factCheckable",
+    "confidenceScore",
+    "summary",
+    "explanation",
+    "claims",
+  ],
+} as const;
+
+const evidenceSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    sourceUrl: { type: "string", minLength: 1, maxLength: 4_000 },
+    stance: { type: "string", enum: sourceStances },
+    evidenceSummary: { type: "string", minLength: 1, maxLength: 1_500 },
+  },
+  required: ["sourceUrl", "stance", "evidenceSummary"],
+} as const;
+
+const researchedClaimSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    text: { type: "string", minLength: 1, maxLength: 1_000 },
+    claimType: { type: "string", enum: claimTypes },
+    factCheckable: { type: "boolean" },
+    reasoning: { type: "string", minLength: 1, maxLength: 3_000 },
+    evidence: {
+      type: "array",
+      maxItems: 20,
+      items: evidenceSchema,
+    },
+  },
+  required: ["text", "claimType", "factCheckable", "reasoning", "evidence"],
+} as const;
+
+export const factCheckResearchPrompt = `You are the evidence-research stage for InSight AI. Trust is more important than speed or appearing certain. You must use live web search before assessing any factual claim. Never rely solely on model memory.
+
+Required process:
+1. Research every fact-checkable claim separately.
+2. Search for current evidence and open relevant pages when useful.
+3. Seek at least two independent sources per factual claim. Prefer primary and authoritative evidence: government agencies, election boards, courts, official records, academic institutions, peer-reviewed journals, public datasets, and official publications.
+4. Corroborate primary evidence with established independent reporting or reputable fact-checking organizations when possible.
+5. Compare supporting and contradicting evidence. Lower-quality blogs, forums, creators, and social posts provide context but must not outweigh stronger sources.
+6. Prioritize recent credible evidence and official updates. Consider publication date, event date, and whether older information has been superseded.
+7. Apply stricter standards to politics, elections, health, medicine, finance, investing, legal topics, public figures, breaking news, emergencies, conflicts, and wars.
+8. If evidence is missing, conflicting, inaccessible, outdated, or inconclusive, say so clearly. Never fill gaps with assumptions.
+9. Do not finish with fewer than two independent publishers for a factual claim unless you have attempted at least two distinct search queries and still cannot find a second credible source.
+
+Anti-hallucination rules:
+- Never invent a source, URL, publisher, publication date, quote, statistic, study, expert, or evidence summary.
+- Every sourceUrl must be copied exactly from web-search tool output.
+- Include evidence only for sources you actually used.
+- Evidence summaries must describe what that specific source says about that specific claim.
+- Use supports only when evidence directly supports the claim, contradicts only when it directly conflicts, context for relevant qualification, and unclear when the source is inconclusive.
+- Do not output truth scores, confidence scores, or verdicts. The server calculates those from verified evidence after your response.
+
+Safety rules:
+- Attribute allegations and avoid defamatory certainty.
+- Do not diagnose medical conditions, issue legal rulings, or promise financial outcomes.
+- Use careful language such as "Evidence suggests," "Available information indicates," and "This claim could not be independently verified."
+- The disclaimer must state that the result is AI-generated, evidence-assisted, may be wrong, and is not final authority.
+
+Return only the requested JSON. Every factual conclusion must be traceable to the evidence entries and exact source URLs.`;
+
+export const factCheckResearchJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    category: { type: "string", enum: categories },
+    claimType: { type: "string", enum: claimTypes },
+    factCheckable: { type: "boolean" },
+    summary: { type: "string", minLength: 1, maxLength: 500 },
+    claims: {
+      type: "array",
+      minItems: 1,
+      maxItems: 10,
+      items: researchedClaimSchema,
     },
     analysis: { type: "string", minLength: 1, maxLength: 5_000 },
     evidenceAssessment: { type: "string", minLength: 1, maxLength: 3_000 },
     limitations: { type: "string", minLength: 1, maxLength: 2_000 },
+    uncertainties: { type: "string", minLength: 1, maxLength: 2_000 },
     recommendedAction: { type: "string", minLength: 1, maxLength: 2_000 },
     disclaimer: { type: "string", minLength: 1, maxLength: 1_000 },
   },
   required: [
-    "verdict",
-    "truthScore",
-    "confidenceScore",
     "category",
     "claimType",
+    "factCheckable",
     "summary",
-    "keyClaims",
+    "claims",
     "analysis",
     "evidenceAssessment",
     "limitations",
+    "uncertainties",
     "recommendedAction",
     "disclaimer",
   ],

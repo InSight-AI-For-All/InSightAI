@@ -18,6 +18,13 @@ create table public.usage_counters (
   updated_at timestamptz not null default now()
 );
 
+create table public.fact_check_rate_limits (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  request_count integer not null default 0 check (request_count >= 0),
+  reset_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
 create table public.fact_checks (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -26,7 +33,7 @@ create table public.fact_checks (
   submitted_url text,
   screenshot_path text,
   verdict text not null,
-  truth_score integer not null check (truth_score between 0 and 100),
+  truth_score integer check (truth_score between 0 and 100),
   confidence_score integer not null check (confidence_score between 0 and 100),
   category text not null,
   claim_type text not null,
@@ -67,6 +74,12 @@ create table public.subscriptions (
   updated_at timestamptz not null default now()
 );
 
+create table public.stripe_webhook_events (
+  event_id text primary key,
+  event_created bigint not null,
+  processed_at timestamptz not null default now()
+);
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -88,6 +101,62 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+revoke all on function public.handle_new_user() from public;
+
+insert into public.profiles (id, email, full_name, avatar_url)
+select
+  id,
+  coalesce(email, ''),
+  raw_user_meta_data ->> 'full_name',
+  raw_user_meta_data ->> 'avatar_url'
+from auth.users
+on conflict (id) do nothing;
+
+insert into public.usage_counters (user_id)
+select id from public.profiles
+on conflict (user_id) do nothing;
+
+create or replace function public.check_fact_check_rate_limit(p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  current_count integer;
+  current_reset_at timestamptz;
+  current_time timestamptz := clock_timestamp();
+begin
+  if p_user_id is null or not exists (select 1 from public.profiles where id = p_user_id) then
+    raise exception 'invalid_user';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('rate:' || p_user_id::text, 0));
+
+  insert into public.fact_check_rate_limits (user_id, request_count, reset_at, updated_at)
+  values (p_user_id, 1, current_time + interval '1 minute', current_time)
+  on conflict (user_id) do update set
+    request_count = case
+      when public.fact_check_rate_limits.reset_at <= current_time then 1
+      else public.fact_check_rate_limits.request_count + 1
+    end,
+    reset_at = case
+      when public.fact_check_rate_limits.reset_at <= current_time then current_time + interval '1 minute'
+      else public.fact_check_rate_limits.reset_at
+    end,
+    updated_at = current_time
+  returning request_count, reset_at into current_count, current_reset_at;
+
+  return jsonb_build_object(
+    'allowed', current_count <= 10,
+    'remaining', greatest(0, 10 - current_count),
+    'retryAfterSeconds', case
+      when current_count <= 10 then 0
+      else greatest(1, ceil(extract(epoch from current_reset_at - current_time))::integer)
+    end
+  );
+end;
+$$;
 
 create or replace function public.reserve_fact_check(p_user_id uuid, p_idempotency_key uuid)
 returns jsonb
@@ -212,6 +281,7 @@ as $$
 $$;
 
 create or replace function public.sync_stripe_subscription(
+  p_event_id text,
   p_user_id uuid,
   p_customer_id text,
   p_subscription_id text,
@@ -228,10 +298,19 @@ as $$
 declare
   affected_rows integer;
 begin
+  if nullif(trim(p_event_id), '') is null then raise exception 'invalid_event'; end if;
   if p_plan not in ('free', 'starter') then raise exception 'invalid_plan'; end if;
   if not exists (select 1 from public.profiles where id = p_user_id) then
     raise exception 'profile_not_found';
   end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('stripe:' || p_user_id::text, 0));
+
+  insert into public.stripe_webhook_events (event_id, event_created)
+  values (p_event_id, p_event_created)
+  on conflict (event_id) do nothing;
+  get diagnostics affected_rows = row_count;
+  if affected_rows = 0 then return false; end if;
 
   insert into public.subscriptions (
     user_id, stripe_customer_id, stripe_subscription_id, plan, status,
@@ -261,9 +340,11 @@ $$;
 
 alter table public.profiles enable row level security;
 alter table public.usage_counters enable row level security;
+alter table public.fact_check_rate_limits enable row level security;
 alter table public.fact_checks enable row level security;
 alter table public.fact_check_reservations enable row level security;
 alter table public.subscriptions enable row level security;
+alter table public.stripe_webhook_events enable row level security;
 
 create policy "profiles_select_own" on public.profiles for select using (auth.uid() = id);
 create policy "profiles_update_own" on public.profiles for update
@@ -273,14 +354,20 @@ create policy "usage_select_own" on public.usage_counters for select using (auth
 create policy "fact_checks_select_own" on public.fact_checks for select using (auth.uid() = user_id);
 create policy "subscriptions_select_own" on public.subscriptions for select using (auth.uid() = user_id);
 
+grant usage on schema public to authenticated;
+grant select on public.profiles, public.usage_counters, public.fact_checks, public.subscriptions
+  to authenticated;
+
 revoke all on function public.reserve_fact_check(uuid, uuid) from public;
+revoke all on function public.check_fact_check_rate_limit(uuid) from public;
 revoke all on function public.complete_fact_check(uuid, uuid, text, text, text, text, jsonb) from public;
 revoke all on function public.release_fact_check(uuid, uuid) from public;
-revoke all on function public.sync_stripe_subscription(uuid, text, text, text, text, timestamptz, timestamptz, bigint) from public;
+revoke all on function public.sync_stripe_subscription(text, uuid, text, text, text, text, timestamptz, timestamptz, bigint) from public;
 grant execute on function public.reserve_fact_check(uuid, uuid) to service_role;
+grant execute on function public.check_fact_check_rate_limit(uuid) to service_role;
 grant execute on function public.complete_fact_check(uuid, uuid, text, text, text, text, jsonb) to service_role;
 grant execute on function public.release_fact_check(uuid, uuid) to service_role;
-grant execute on function public.sync_stripe_subscription(uuid, text, text, text, text, timestamptz, timestamptz, bigint) to service_role;
+grant execute on function public.sync_stripe_subscription(text, uuid, text, text, text, text, timestamptz, timestamptz, bigint) to service_role;
 
 revoke update on public.profiles from authenticated;
 grant update (full_name, avatar_url, updated_at) on public.profiles to authenticated;

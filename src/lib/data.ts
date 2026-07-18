@@ -1,4 +1,5 @@
 import { categories, factCheckResultSchema, verdicts, type FactCheckResult, type InputType } from "@/lib/fact-check/schema";
+import { ConfigurationError } from "@/lib/env";
 import { getPlan } from "@/lib/plans";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -9,7 +10,7 @@ type FactCheckRow = {
   submitted_url: string | null;
   screenshot_path: string | null;
   verdict: string;
-  truth_score: number;
+  truth_score: number | null;
   confidence_score: number;
   category: string;
   claim_type: string;
@@ -25,7 +26,7 @@ export type FactCheckRecord = {
   submittedUrl: string | null;
   screenshotPath: string | null;
   verdict: FactCheckResult["verdict"];
-  truthScore: number;
+  truthScore: number | null;
   confidenceScore: number;
   category: FactCheckResult["category"];
   claimType: FactCheckResult["claimType"];
@@ -60,7 +61,7 @@ export async function getFactChecks(
   filters: { query?: string; verdict?: string; category?: string; from?: string } = {},
 ) {
   const supabase = await createServerSupabaseClient();
-  if (!supabase) return [];
+  if (!supabase) throw new ConfigurationError("Supabase");
 
   let query = supabase
     .from("fact_checks")
@@ -80,7 +81,8 @@ export async function getFactChecks(
   }
 
   const { data, error } = await query;
-  if (error || !data) return [];
+  if (error) throw new Error("Fact-check history could not be loaded.");
+  if (!data) return [];
 
   const records = (data as FactCheckRow[])
     .map(mapFactCheck)
@@ -89,7 +91,7 @@ export async function getFactChecks(
   if (!search) return records;
 
   return records.filter((record) =>
-    [record.summary, record.rawText, record.submittedUrl, ...record.result.keyClaims]
+    [record.summary, record.rawText, record.submittedUrl, ...record.result.keyClaims, ...record.result.claims.map((claim) => claim.text)]
       .filter(Boolean)
       .some((value) => value?.toLocaleLowerCase().includes(search)),
   );
@@ -101,7 +103,7 @@ export async function getFactCheck(userId: string, id: string) {
   }
 
   const supabase = await createServerSupabaseClient();
-  if (!supabase) return null;
+  if (!supabase) throw new ConfigurationError("Supabase");
 
   const { data, error } = await supabase
     .from("fact_checks")
@@ -109,13 +111,14 @@ export async function getFactCheck(userId: string, id: string) {
     .eq("id", id)
     .eq("user_id", userId)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) throw new Error("The fact-check result could not be loaded.");
+  if (!data) return null;
   return mapFactCheck(data as FactCheckRow);
 }
 
 export async function getDashboardOverview(userId: string) {
   const supabase = await createServerSupabaseClient();
-  if (!supabase) return null;
+  if (!supabase) throw new ConfigurationError("Supabase");
 
   const [profileResponse, usageResponse, checks] = await Promise.all([
     supabase.from("profiles").select("full_name, plan").eq("id", userId).maybeSingle(),
@@ -126,7 +129,10 @@ export async function getDashboardOverview(userId: string) {
       .maybeSingle(),
     getFactChecks(userId),
   ]);
-  if (profileResponse.error || usageResponse.error || !profileResponse.data || !usageResponse.data) {
+  if (profileResponse.error || usageResponse.error) {
+    throw new Error("Dashboard data could not be loaded.");
+  }
+  if (!profileResponse.data || !usageResponse.data) {
     return null;
   }
 
@@ -137,6 +143,7 @@ export async function getDashboardOverview(userId: string) {
     : plan.id === "free"
       ? usageResponse.data.free_used
       : 0;
+  const scoredChecks = checks.filter((check) => check.truthScore !== null);
 
   return {
     fullName: profileResponse.data.full_name as string | null,
@@ -144,10 +151,10 @@ export async function getDashboardOverview(userId: string) {
     used,
     remaining: Math.max(0, plan.limit - used),
     totalChecks: checks.length,
-    averageTruth: checks.length
-      ? Math.round(checks.reduce((total, check) => total + check.truthScore, 0) / checks.length)
+    averageTruth: scoredChecks.length
+      ? Math.round(scoredChecks.reduce((total, check) => total + check.truthScore!, 0) / scoredChecks.length)
       : null,
-    needsReview: checks.filter((check) => check.truthScore < 50).length,
+    needsReview: scoredChecks.filter((check) => check.truthScore! < 50).length,
     topCategory: Object.entries(
       checks.reduce<Record<string, number>>((totals, check) => {
         totals[check.category] = (totals[check.category] || 0) + 1;

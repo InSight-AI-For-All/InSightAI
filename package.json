@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "verify:production": "node --env-file-if-exists=.env.local scripts/verify-production.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -18,10 +19,10 @@
     "@fontsource-variable/manrope": "^5.2.8",
     "@fontsource-variable/space-grotesk": "^5.2.10",
     "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.52.1",
+    "@supabase/supabase-js": "^2.110.7",
     "lucide-react": "^0.468.0",
     "next": "15.5.20",
-    "openai": "^5.10.1",
+    "openai": "^6.48.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "stripe": "^18.3.0",
@@ -42,5 +43,10 @@
   },
   "overrides": {
     "postcss": "8.5.16"
+  },
+  "knip": {
+    "ignoreDependencies": [
+      "eslint-config-next"
+    ]
   }
 }

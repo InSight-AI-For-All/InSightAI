@@ -2,12 +2,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ConfigurationError } from "@/lib/env";
 import { analyzeFactCheck } from "@/lib/fact-check/provider";
 import { factCheckSubmissionSchema } from "@/lib/fact-check/schema";
-import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  getRequestId,
+  hasValidImageSignature,
+  isRequestBodyTooLarge,
+  isSameOriginRequest,
+  maxFactCheckRequestBytes,
+} from "@/lib/request-security";
+import { getErrorName, logServerError } from "@/lib/server-log";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 const acceptedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxImageBytes = 5 * 1024 * 1024;
@@ -21,30 +28,62 @@ type Reservation = {
   limit?: number;
 };
 
-function errorResponse(message: string, status: number, code: string, headers?: HeadersInit) {
-  return NextResponse.json({ error: message, code }, { status, headers });
+type RateLimit = {
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+};
+
+function responseHeaders(requestId: string, headers?: HeadersInit) {
+  const result = new Headers(headers);
+  result.set("X-Request-ID", requestId);
+  return result;
+}
+
+function errorResponse(message: string, status: number, code: string, requestId: string, headers?: HeadersInit) {
+  return NextResponse.json({ error: message, code, requestId }, {
+    status,
+    headers: responseHeaders(requestId, headers),
+  });
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("This request origin is not allowed.", 403, "INVALID_ORIGIN", requestId);
+  }
+  if (isRequestBodyTooLarge(request, maxFactCheckRequestBytes)) {
+    return errorResponse("The submission is too large.", 413, "PAYLOAD_TOO_LARGE", requestId);
+  }
+
   const supabase = await createServerSupabaseClient();
-  if (!supabase) return errorResponse("Authentication is not configured.", 503, "NOT_CONFIGURED");
+  if (!supabase) return errorResponse("Authentication is not configured.", 503, "NOT_CONFIGURED", requestId);
 
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
-  if (!user) return errorResponse("Sign in to run a fact check.", 401, "UNAUTHORIZED");
+  if (!user) return errorResponse("Sign in to run a fact check.", 401, "UNAUTHORIZED", requestId);
 
   let admin: ReturnType<typeof createAdminSupabaseClient>;
   try {
     admin = createAdminSupabaseClient();
   } catch (error) {
-    if (error instanceof ConfigurationError) return errorResponse(error.message, 503, "NOT_CONFIGURED");
+    if (error instanceof ConfigurationError) return errorResponse(error.message, 503, "NOT_CONFIGURED", requestId);
     throw error;
   }
 
-  const rateLimit = checkRateLimit(user.id);
+  const { data: rateLimitData, error: rateLimitError } = await admin.rpc(
+    "check_fact_check_rate_limit",
+    { p_user_id: user.id },
+  );
+  if (rateLimitError) {
+    logServerError("fact_check.rate_limit_failed", { requestId, errorName: rateLimitError.name });
+    return errorResponse("Request limits could not be verified. Try again shortly.", 503, "RATE_LIMIT_UNAVAILABLE", requestId);
+  }
+  const rateLimit = rateLimitData as RateLimit;
   if (!rateLimit.allowed) {
-    return errorResponse("Too many requests. Try again shortly.", 429, "RATE_LIMITED", {
+    return errorResponse("Too many requests. Try again shortly.", 429, "RATE_LIMITED", requestId, {
       "Retry-After": String(rateLimit.retryAfterSeconds),
+      "X-RateLimit-Remaining": "0",
     });
   }
 
@@ -52,7 +91,7 @@ export async function POST(request: NextRequest) {
   try {
     formData = await request.formData();
   } catch {
-    return errorResponse("The submission could not be read.", 400, "INVALID_FORM");
+    return errorResponse("The submission could not be read.", 400, "INVALID_FORM", requestId);
   }
 
   const submissionResult = factCheckSubmissionSchema.safeParse({
@@ -66,21 +105,28 @@ export async function POST(request: NextRequest) {
       submissionResult.error.issues[0]?.message || "Check the submitted content.",
       400,
       "INVALID_INPUT",
+      requestId,
     );
   }
 
   const submission = submissionResult.data;
   const image = formData.get("image");
+  let imageBytes: Buffer | undefined;
   if (submission.inputType === "screenshot") {
     if (!(image instanceof File) || image.size === 0) {
-      return errorResponse("Choose a screenshot to analyze.", 400, "IMAGE_REQUIRED");
+      return errorResponse("Choose a screenshot to analyze.", 400, "IMAGE_REQUIRED", requestId);
     }
     if (!acceptedImageTypes.has(image.type) || image.size > maxImageBytes) {
       return errorResponse(
         "Use a JPG, PNG, or WebP image no larger than 5 MB.",
         400,
         "INVALID_IMAGE",
+        requestId,
       );
+    }
+    imageBytes = Buffer.from(await image.arrayBuffer());
+    if (!hasValidImageSignature(image.type, imageBytes)) {
+      return errorResponse("The uploaded file does not match its image type.", 400, "INVALID_IMAGE_SIGNATURE", requestId);
     }
   }
 
@@ -88,35 +134,28 @@ export async function POST(request: NextRequest) {
     "reserve_fact_check",
     { p_user_id: user.id, p_idempotency_key: submission.idempotencyKey },
   );
-  if (reservationError) return errorResponse("Usage could not be verified.", 500, "USAGE_ERROR");
+  if (reservationError) return errorResponse("Usage could not be verified.", 500, "USAGE_ERROR", requestId);
 
   const reservation = reservationData as Reservation;
   if (!reservation.allowed) {
     return NextResponse.json(
       { error: "You have reached your plan limit.", code: "LIMIT_REACHED", ...reservation },
-      { status: 402 },
+      { status: 402, headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining) }) },
     );
   }
   if (reservation.status === "completed" && reservation.factCheckId) {
-    return NextResponse.json({ factCheckId: reservation.factCheckId, reused: true });
+    return NextResponse.json({ factCheckId: reservation.factCheckId, reused: true }, {
+      headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining) }),
+    });
   }
   if (!reservation.reservationId) {
-    return errorResponse("A usage reservation could not be created.", 500, "USAGE_ERROR");
+    return errorResponse("A usage reservation could not be created.", 500, "USAGE_ERROR", requestId);
   }
 
-  let screenshotPath = "";
   try {
-    let imageDataUrl: string | undefined;
-    if (image instanceof File && submission.inputType === "screenshot") {
-      const bytes = Buffer.from(await image.arrayBuffer());
-      const extension = image.type === "image/png" ? "png" : image.type === "image/webp" ? "webp" : "jpg";
-      screenshotPath = `${user.id}/${submission.idempotencyKey}.${extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from("screenshots")
-        .upload(screenshotPath, bytes, { contentType: image.type, upsert: false });
-      if (uploadError) throw new Error("The screenshot could not be stored.");
-      imageDataUrl = `data:${image.type};base64,${bytes.toString("base64")}`;
-    }
+    const imageDataUrl = image instanceof File && imageBytes && submission.inputType === "screenshot"
+      ? `data:${image.type};base64,${imageBytes.toString("base64")}`
+      : undefined;
 
     const result = await analyzeFactCheck({ ...submission, imageDataUrl });
     const { data: factCheckId, error: completionError } = await admin.rpc(
@@ -127,28 +166,31 @@ export async function POST(request: NextRequest) {
         p_input_type: submission.inputType,
         p_raw_text: submission.text,
         p_submitted_url: submission.url,
-        p_screenshot_path: screenshotPath,
+        p_screenshot_path: "",
         p_result: result,
       },
     );
     if (completionError) throw new Error("The result could not be saved.");
 
-    return NextResponse.json({ factCheckId, result }, { status: 201 });
-  } catch (error) {
-    await admin.rpc("release_fact_check", { p_user_id: user.id, p_reservation_id: reservation.reservationId });
-    if (screenshotPath) await supabase.storage.from("screenshots").remove([screenshotPath]);
-
-    if (error instanceof ConfigurationError) {
-      return errorResponse(error.message, 503, "NOT_CONFIGURED");
-    }
-    console.error("Fact-check pipeline failed", {
-      userId: user.id,
-      error: error instanceof Error ? error.message : "Unknown error",
+    return NextResponse.json({ factCheckId, result }, {
+      status: 201,
+      headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining) }),
     });
+  } catch (error) {
+    const { error: releaseError } = await admin.rpc("release_fact_check", {
+      p_user_id: user.id,
+      p_reservation_id: reservation.reservationId,
+    });
+    if (releaseError) logServerError("fact_check.reservation_release_failed", { requestId, errorName: releaseError.name });
+    if (error instanceof ConfigurationError) {
+      return errorResponse(error.message, 503, "NOT_CONFIGURED", requestId);
+    }
+    logServerError("fact_check.pipeline_failed", { requestId, errorName: getErrorName(error) });
     return errorResponse(
       "We could not complete this check. Your usage was not charged. Please try again.",
       502,
       "ANALYSIS_FAILED",
+      requestId,
     );
   }
 }

@@ -24,7 +24,7 @@ const analysisSteps = [
 
 type ApiError = { error?: string; code?: string };
 
-export function FactCheckForm({ initialMode = "text" }: { initialMode?: InputType }) {
+export function FactCheckForm({ initialMode = "text", configured = true }: { initialMode?: InputType; configured?: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<InputType>(initialMode);
   const [text, setText] = useState("");
@@ -51,7 +51,7 @@ export function FactCheckForm({ initialMode = "text" }: { initialMode?: InputTyp
     if (!loading) return;
     const interval = window.setInterval(
       () => setLoadingStep((current) => Math.min(current + 1, analysisSteps.length - 1)),
-      1_600,
+      10_000,
     );
     return () => window.clearInterval(interval);
   }, [loading]);
@@ -78,6 +78,7 @@ export function FactCheckForm({ initialMode = "text" }: { initialMode?: InputTyp
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (!configured) return setError("Fact checking is temporarily unavailable while server configuration is completed.");
     if (mode === "text" && text.trim().length < 5) return setError("Enter at least 5 characters to check.");
     if (mode === "link" && !/^https?:\/\//i.test(url)) return setError("Enter a full http or https URL.");
     if (mode === "screenshot" && !image) return setError("Choose a screenshot to analyze.");
@@ -108,7 +109,7 @@ export function FactCheckForm({ initialMode = "text" }: { initialMode?: InputTyp
   }
 
   if (loading && !limitReached) {
-    return <div className={`panel ${styles.loading}`} aria-live="polite"><div className={styles.loadingVisual}><span className={styles.loadingOrbit}><ScanSearch size={34} /></span><span className={styles.loadingPulse} /></div><p className="eyebrow">Analysis in progress</p><h2>{analysisSteps[loadingStep]}</h2><p>InSight is keeping uncertainty visible while it builds your assessment.</p><div className={styles.loadingSteps}>{analysisSteps.map((step, index) => <span className={index <= loadingStep ? styles.loadingStepActive : ""} key={step}>{index < loadingStep ? <Check size={13} /> : <span>{index + 1}</span>}{step}</span>)}</div><div className={styles.loadingBar}><span style={{ width: `${((loadingStep + 1) / analysisSteps.length) * 100}%` }} /></div></div>;
+    return <div className={`panel ${styles.loading}`} aria-live="polite"><div className={styles.loadingVisual}><span className={styles.loadingOrbit}><ScanSearch size={34} /></span><span className={styles.loadingPulse} /></div><p className="eyebrow">Analysis in progress</p><h2>{analysisSteps[loadingStep]}</h2><p>InSight is searching and comparing sources. Thorough checks can take up to two minutes.</p><div className={styles.loadingSteps}>{analysisSteps.map((step, index) => <span className={index <= loadingStep ? styles.loadingStepActive : ""} key={step}>{index < loadingStep ? <Check size={13} /> : <span>{index + 1}</span>}{step}</span>)}</div><div className={styles.loadingBar}><span style={{ width: `${((loadingStep + 1) / analysisSteps.length) * 100}%` }} /></div></div>;
   }
 
   if (limitReached) {
@@ -125,10 +126,11 @@ export function FactCheckForm({ initialMode = "text" }: { initialMode?: InputTyp
         <div className={styles.intro}><h2>{activeMode.title}</h2><p>{activeMode.help}</p></div>
         <form className={styles.form} onSubmit={submit}>
           {mode === "text" && <div className="form-field"><label htmlFor="claim-text">Claim or post text</label><textarea className="textarea" id="claim-text" value={text} onChange={(event) => setText(event.target.value)} maxLength={15_000} placeholder="Paste the claim exactly as you saw it…" /><small className="muted">{text.length.toLocaleString()} / 15,000</small></div>}
-          {mode === "link" && <><div className="form-field"><label htmlFor="claim-url">Post or article URL</label><input className="input" id="claim-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" /></div><div className="form-field"><label htmlFor="link-context">What does the post claim? <span className="muted">(recommended)</span></label><textarea className="textarea" id="link-context" value={text} onChange={(event) => setText(event.target.value)} maxLength={15_000} placeholder="Paste the caption or add context. InSight does not assume it can retrieve every page." /></div></>}
-          {mode === "screenshot" && <><div className={`${styles.dropzone} ${dragging ? styles.dropzoneDragging : ""}`} onPaste={pasteImage} onDragEnter={() => setDragging(true)} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); chooseImage(event.dataTransfer.files?.[0]); }} onDragOver={(event) => event.preventDefault()} tabIndex={0}>{previewUrl ? <div className={styles.preview}><Image src={previewUrl} alt="Screenshot preview" width={960} height={720} unoptimized /><span><Check size={15} /> Ready to analyze</span></div> : <div className={styles.uploadPrompt}><span className={styles.uploadIcon}><Upload size={24} /></span><strong>Drop, paste, or choose a screenshot</strong><small>JPG, PNG, or WebP · up to 5 MB</small><kbd>Ctrl V</kbd></div>}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseImage(event.target.files?.[0])} aria-label="Upload screenshot" /></div><div className="form-field"><label htmlFor="screenshot-context">Extra context <span className="muted">(optional)</span></label><textarea className="textarea" style={{ minHeight: 100 }} id="screenshot-context" value={text} onChange={(event) => setText(event.target.value)} maxLength={15_000} placeholder="Where did you see this, and what are you concerned about?" /></div></>}
+          {mode === "link" && <><div className="form-field"><label htmlFor="claim-url">Post or article URL</label><input className="input" id="claim-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" /></div><div className="form-field"><label htmlFor="link-context">What does the post claim? <span className="muted">(recommended)</span></label><textarea className="textarea" id="link-context" value={text} onChange={(event) => setText(event.target.value)} maxLength={15_000} placeholder="Paste the caption or add context to focus the web search." /></div></>}
+          {mode === "screenshot" && <><div className={`${styles.dropzone} ${dragging ? styles.dropzoneDragging : ""}`} onPaste={pasteImage} onDragEnter={() => setDragging(true)} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); chooseImage(event.dataTransfer.files?.[0]); }} onDragOver={(event) => event.preventDefault()}>{previewUrl ? <div className={styles.preview}><Image src={previewUrl} alt="Screenshot preview" width={960} height={720} unoptimized /><span><Check size={15} /> Ready to analyze</span></div> : <div className={styles.uploadPrompt}><span className={styles.uploadIcon}><Upload size={24} /></span><strong>Drop, paste, or choose a screenshot</strong><small>JPG, PNG, or WebP · up to 5 MB</small><kbd>Ctrl V</kbd></div>}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseImage(event.target.files?.[0])} aria-label="Upload screenshot" aria-describedby="screenshot-upload-help" /></div><span className={styles.uploadHelp} id="screenshot-upload-help">Press Enter to browse for a JPG, PNG, or WebP image up to 5 MB, or paste an image from the clipboard.</span><div className="form-field"><label htmlFor="screenshot-context">Extra context <span className="muted">(optional)</span></label><textarea className="textarea" style={{ minHeight: 100 }} id="screenshot-context" value={text} onChange={(event) => setText(event.target.value)} maxLength={15_000} placeholder="Where did you see this, and what are you concerned about?" /></div></>}
+          {!configured && <p className="alert" role="status">Fact checking is temporarily unavailable while server configuration is completed.</p>}
           {error && <p className="alert" role="alert">{error}</p>}
-          <div className={styles.formFooter}><p><Sparkles size={14} /> Evidence-assisted, not absolute truth. High-stakes claims should still be checked against primary sources.</p><button className="button" type="submit"><ScanSearch size={18} /> InSight this</button></div>
+          <div className={styles.formFooter}><p><Sparkles size={14} /> Evidence-assisted, not absolute truth. High-stakes claims should still be checked against primary sources.</p><button className="button" type="submit" disabled={!configured}><ScanSearch size={18} /> InSight this</button></div>
         </form>
       </div>
     </section>

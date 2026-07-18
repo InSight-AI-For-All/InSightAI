@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnvironment } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
 
 export async function refreshSession(request: NextRequest) {
   const environment = getPublicSupabaseEnvironment();
@@ -8,6 +9,7 @@ export async function refreshSession(request: NextRequest) {
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(environment.url, environment.anonKey, {
+    global: { fetch: fetchWithTimeout },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookiesToSet) => {

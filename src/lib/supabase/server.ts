@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getPublicSupabaseEnvironment } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
 
 export async function createServerSupabaseClient() {
   const environment = getPublicSupabaseEnvironment();
@@ -8,6 +9,7 @@ export async function createServerSupabaseClient() {
 
   const cookieStore = await cookies();
   return createServerClient(environment.url, environment.anonKey, {
+    global: { fetch: fetchWithTimeout },
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (cookiesToSet) => {

@@ -7,9 +7,9 @@ export function CheckRow({ check }: { check: FactCheckRecord }) {
   return (
     <Link className="check-row" href={`/results/${check.id}`}>
       <span className="check-type-icon"><Icon size={18} /></span>
-      <span className="check-summary"><strong>{check.summary}</strong><small>{new Date(check.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} · {check.category}</small></span>
+      <span className="check-summary"><strong title={check.summary}>{check.summary}</strong><small>{new Date(check.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} · {check.category}</small></span>
       <span className="status-pill">{check.verdict}</span>
-      <span><span className="score-compact">{check.truthScore}</span><small className="muted"> / 100</small></span>
+      <span><span className="score-compact">{check.truthScore ?? "—"}</span>{check.truthScore !== null && <small className="muted"> / 100</small>}</span>
       <ArrowUpRight size={18} className="muted" />
     </Link>
   );

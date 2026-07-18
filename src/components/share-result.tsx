@@ -6,7 +6,7 @@ import { Check, Download, Share2 } from "lucide-react";
 type ShareResultProps = {
   verdict: string;
   category: string;
-  truthScore: number;
+  truthScore: number | null;
   confidenceScore: number;
   summary: string;
 };
@@ -62,13 +62,13 @@ async function createShareImage(result: ShareResultProps) {
 
   context.fillStyle = "#f8f8ff";
   context.font = "700 250px Arial, sans-serif";
-  context.fillText(String(result.truthScore), 135, 700);
+  context.fillText(result.truthScore === null ? "N/A" : String(result.truthScore), 135, 700);
   context.fillStyle = "#c6ff4a";
   context.font = "700 72px Manrope, sans-serif";
   context.fillText("/ 100", 680, 700);
   context.fillStyle = "#a8a9bd";
   context.font = "650 34px Manrope, sans-serif";
-  context.fillText("TRUTH SCORE", 145, 770);
+  context.fillText(result.truthScore === null ? "NOT FACT-CHECKABLE" : "TRUTH SCORE", 145, 770);
 
   context.fillStyle = "rgba(255,255,255,.09)";
   context.beginPath();
@@ -108,7 +108,7 @@ export function ShareResult(props: ShareResultProps) {
       const blob = await createShareImage(props);
       const file = new File([blob], "insight-result.png", { type: "image/png" });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ title: "My InSight result", text: `${props.verdict} · Truth score ${props.truthScore}/100`, files: [file] });
+        await navigator.share({ title: "My InSight result", text: props.truthScore === null ? `${props.verdict} · No truth score assigned` : `${props.verdict} · Truth score ${props.truthScore}/100`, files: [file] });
       } else {
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);

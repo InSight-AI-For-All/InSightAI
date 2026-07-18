@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { ConfigurationError, getPublicSupabaseEnvironment, getServerEnvironment } from "@/lib/env";
+import { fetchWithTimeout } from "@/lib/fetch-timeout";
 
 export function createAdminSupabaseClient() {
   const environment = getPublicSupabaseEnvironment();
@@ -10,5 +11,6 @@ export function createAdminSupabaseClient() {
 
   return createClient(environment.url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: fetchWithTimeout },
   });
 }

@@ -6,7 +6,7 @@ import { load } from "cheerio";
 import ipaddr from "ipaddr.js";
 
 const maximumResponseBytes = 512 * 1024;
-const maximumExtractedCharacters = 12_000;
+const maximumExtractedCharacters = 6_000;
 const requestTimeoutMilliseconds = 8_000;
 const maximumRedirects = 3;
 

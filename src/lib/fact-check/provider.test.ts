@@ -1,144 +1,161 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { analyzeFactCheck, FactCheckAnalysisError } from "./provider";
 
-const { createResponse, retrieveLinkedPage } = vi.hoisted(() => ({
-  createResponse: vi.fn(),
-  retrieveLinkedPage: vi.fn(),
-}));
-
-vi.mock("openai", () => ({
-  default: class OpenAI {
-    responses = { create: createResponse };
-  },
-}));
-
+const { createResponse, retrieveLinkedPage } = vi.hoisted(() => ({ createResponse: vi.fn(), retrieveLinkedPage: vi.fn() }));
+vi.mock("openai", () => ({ default: class OpenAI { responses = { create: createResponse }; } }));
 vi.mock("@/lib/fact-check/linked-page", () => ({ retrieveLinkedPage }));
 
-const inaccessibleClassification = {
-  category: "General",
-  claimType: "Unverifiable",
+const opinionClassification = {
+  category: "Opinion",
+  claimType: "Opinion / Subjective",
   factCheckable: false,
-  confidenceScore: 40,
-  summary: "The linked page could not be accessed.",
-  explanation: "The submitted page content could not be retrieved after searching the URL.",
-  claims: [{
-    text: "The linked page content could not be retrieved.",
-    claimType: "Unverifiable",
-    factCheckable: false,
-  }],
+  confidenceScore: 90,
+  summary: "This is an opinion.",
+  explanation: "The statement expresses a preference.",
+  claims: [{ text: "This is the best movie.", claimType: "Opinion / Subjective", factCheckable: false }],
 };
 
-describe("fact-check provider URL classification", () => {
+function factualClassification(category = "General") {
+  return {
+    category,
+    claimType: "Factual Claim",
+    factCheckable: true,
+    confidenceScore: 90,
+    summary: "A factual claim requires verification.",
+    explanation: "External evidence can support or contradict it.",
+    claims: [{ text: "The city opened the park in 2020.", claimType: "Factual Claim", factCheckable: true }],
+  };
+}
+
+const sourceA = "https://city.gov/park";
+const sourceB = "https://reuters.com/world/park";
+const research = {
+  category: "General",
+  claimType: "Factual Claim",
+  factCheckable: true,
+  summary: "The claim is supported.",
+  claims: [{
+    text: "The city opened the park in 2020.",
+    claimType: "Factual Claim",
+    factCheckable: true,
+    reasoning: "Two independent sources report the opening.",
+    evidence: [
+      { sourceUrl: sourceA, stance: "supports", evidenceSummary: "The city records the 2020 opening." },
+      { sourceUrl: sourceB, stance: "supports", evidenceSummary: "Reuters reported the opening." },
+    ],
+  }],
+  analysis: "Available evidence supports the claim.",
+  evidenceAssessment: "Two independent sources agree.",
+  limitations: "Historical records can be corrected.",
+  uncertainties: "No material uncertainty was found.",
+  recommendedAction: "Safe to share with source context.",
+  disclaimer: "AI-generated analysis may be wrong and is not final authority.",
+};
+
+function researchResponse() {
+  return {
+    output_text: JSON.stringify(research),
+    output: [
+      { type: "web_search_call", action: { type: "search", sources: [{ url: sourceA }, { url: sourceB }] } },
+      { type: "message", content: [{ type: "output_text", annotations: [
+        { type: "url_citation", url: sourceA, title: "City record" },
+        { type: "url_citation", url: sourceB, title: "Reuters report" },
+      ] }] },
+    ],
+  };
+}
+
+function submission(inputType: "text" | "link" | "screenshot" = "text") {
+  return {
+    inputType,
+    text: inputType === "link" ? "" : "The city opened the park in 2020.",
+    url: inputType === "link" ? "https://example.com/post" : "",
+    idempotencyKey: crypto.randomUUID(),
+    ...(inputType === "screenshot" ? { imageDataUrl: "data:image/png;base64,abc" } : {}),
+  };
+}
+
+describe("cost-routed fact-check provider", () => {
   beforeEach(() => {
     createResponse.mockReset();
     retrieveLinkedPage.mockReset();
-    retrieveLinkedPage.mockResolvedValue({
-      url: "https://www.instagram.com/p/example/embed/captioned/",
-      text: "The post claims a free public concert will be held at Piedmont Park.",
-    });
+    retrieveLinkedPage.mockResolvedValue({ url: "https://example.com/post", text: "The city opened the park in 2020." });
     vi.stubEnv("OPENAI_API_KEY", "sk-test");
     vi.stubEnv("OPENAI_MODEL", "gpt-5-nano");
+    vi.stubEnv("OPENAI_DEFAULT_FACT_CHECK_MODEL", "");
+    vi.stubEnv("OPENAI_WEB_SEARCH_MODEL", "");
+    vi.stubEnv("OPENAI_HIGH_RISK_MODEL", "");
+    vi.stubEnv("ENABLE_WEB_SEARCH", "true");
+    vi.stubEnv("ENABLE_MODEL_ROUTING", "true");
   });
 
-  it("requires web search to inspect a submitted URL before classification", async () => {
-    createResponse.mockResolvedValueOnce({
-      output_text: JSON.stringify(inaccessibleClassification),
-      output: [{
-        type: "web_search_call",
-        action: {
-          type: "search",
-          sources: [{ url: "https://www.instagram.com/p/example/?utm_source=share" }],
-        },
-      }],
-    });
-
-    const result = await analyzeFactCheck({
-      inputType: "link",
-      text: "",
-      url: "https://www.instagram.com/p/example/",
-      idempotencyKey: "00000000-0000-4000-8000-000000000000",
-    });
-
-    const request = createResponse.mock.calls[0][0];
-    expect(request.tools).toEqual([{ type: "web_search", search_context_size: "medium" }]);
-    expect(request.tool_choice).toBe("required");
-    expect(request.max_tool_calls).toBe(2);
-    expect(request.instructions).toContain("Search the exact submitted URL first");
-    expect(request.input[0].content[0].text).toContain("https://www.instagram.com/p/example/");
-    expect(request.input[0].content[0].text).toContain("free public concert");
-    expect(request.input[0].content[0].text).toContain("untrusted data");
-    expect(retrieveLinkedPage).toHaveBeenCalledWith("https://www.instagram.com/p/example/");
-    expect(result.methodology).toMatchObject({ searchPerformed: true, sourceCount: 1 });
-    expect(result.sources[0]?.url).toBe("https://www.instagram.com/p/example/");
-    expect(result.summary).not.toContain("no accompanying textual claim");
-  });
-
-  it("does not search during classification for plain text", async () => {
-    createResponse.mockResolvedValueOnce({
-      output_text: JSON.stringify(inaccessibleClassification),
-      output: [],
-    });
-
-    const result = await analyzeFactCheck({
-      inputType: "text",
-      text: "This statement is too vague to verify.",
-      url: "",
-      idempotencyKey: "00000000-0000-4000-8000-000000000001",
-    });
-
+  it("classifies extracted link text without paying for web search", async () => {
+    createResponse.mockResolvedValueOnce({ output_text: JSON.stringify(opinionClassification), output: [] });
+    const result = await analyzeFactCheck(submission("link"));
     const request = createResponse.mock.calls[0][0];
     expect(request.tools).toBeUndefined();
-    expect(request.tool_choice).toBeUndefined();
-    expect(retrieveLinkedPage).not.toHaveBeenCalled();
+    expect(request.input[0].content[0].text).toContain("page_text_untrusted");
+    expect(request.input[0].content[0].text).toContain("opened the park");
+    expect(retrieveLinkedPage).toHaveBeenCalledOnce();
     expect(result.methodology.searchPerformed).toBe(false);
+  });
+
+  it("skips research and web search for opinions and memes", async () => {
+    createResponse.mockResolvedValueOnce({ output_text: JSON.stringify(opinionClassification), output: [] });
+    const result = await analyzeFactCheck(submission());
+    expect(createResponse).toHaveBeenCalledTimes(1);
+    expect(result.verdict).toBe("Opinion / Not Fact Checkable");
+  });
+
+  it("routes a normal factual claim to the cheapest documented search model", async () => {
+    createResponse
+      .mockResolvedValueOnce({ output_text: JSON.stringify(factualClassification()), output: [] })
+      .mockResolvedValueOnce(researchResponse());
+    const result = await analyzeFactCheck(submission());
+    expect(createResponse.mock.calls[0][0].model).toBe("gpt-5-nano");
+    expect(createResponse.mock.calls[1][0]).toMatchObject({ model: "gpt-5.4-nano", tool_choice: "required", max_tool_calls: 2 });
+    expect(createResponse.mock.calls[1][0].tools).toEqual([{ type: "web_search", search_context_size: "low" }]);
+    expect(result.methodology).toMatchObject({ searchPerformed: true, independentSourceCount: 2 });
+  });
+
+  it("routes high-risk claims to the stronger model only for research", async () => {
+    createResponse
+      .mockResolvedValueOnce({ output_text: JSON.stringify(factualClassification("Health")), output: [] })
+      .mockResolvedValueOnce({ ...researchResponse(), output_text: JSON.stringify({ ...research, category: "Health" }) });
+    await analyzeFactCheck(submission());
+    expect(createResponse.mock.calls[0][0].model).toBe("gpt-5-nano");
+    expect(createResponse.mock.calls[1][0]).toMatchObject({ model: "gpt-5.4-mini", max_tool_calls: 3 });
+  });
+
+  it("sends a screenshot once at low detail and never repeats it during research", async () => {
+    createResponse
+      .mockResolvedValueOnce({ output_text: JSON.stringify(factualClassification()), output: [] })
+      .mockResolvedValueOnce(researchResponse());
+    await analyzeFactCheck(submission("screenshot"));
+    expect(createResponse.mock.calls[0][0].input[0].content[1]).toMatchObject({ type: "input_image", detail: "low" });
+    expect(typeof createResponse.mock.calls[1][0].input).toBe("string");
+    expect(createResponse.mock.calls[1][0].input).not.toContain("data:image");
+  });
+
+  it("repairs malformed classification JSON once with a short no-tool request", async () => {
+    createResponse
+      .mockResolvedValueOnce({ output_text: "{bad json", output: [] })
+      .mockResolvedValueOnce({ output_text: JSON.stringify(opinionClassification), output: [] });
+    await analyzeFactCheck(submission());
+    expect(createResponse).toHaveBeenCalledTimes(2);
+    expect(createResponse.mock.calls[1][0].instructions).toContain("Repair");
+    expect(createResponse.mock.calls[1][0].tools).toBeUndefined();
+    expect(createResponse.mock.calls[1][0].input).toBe("{bad json");
   });
 
   it("does not call OpenAI when a contextless linked page cannot be extracted", async () => {
     retrieveLinkedPage.mockRejectedValueOnce(new Error("Blocked"));
-
-    await expect(analyzeFactCheck({
-      inputType: "link",
-      text: "",
-      url: "https://example.com/blocked",
-      idempotencyKey: "00000000-0000-4000-8000-000000000002",
-    })).rejects.toMatchObject({
-      name: "FactCheckAnalysisError",
-      aiUsed: false,
-      code: "LINK_CONTENT_UNAVAILABLE",
-    } satisfies Partial<FactCheckAnalysisError>);
+    await expect(analyzeFactCheck(submission("link"))).rejects.toMatchObject({ aiUsed: false, code: "LINK_CONTENT_UNAVAILABLE" } satisfies Partial<FactCheckAnalysisError>);
     expect(createResponse).not.toHaveBeenCalled();
   });
 
-  it("marks failures after an OpenAI request as chargeable", async () => {
+  it("marks provider failures after a request as chargeable", async () => {
     createResponse.mockRejectedValueOnce(new Error("Provider unavailable"));
-
-    await expect(analyzeFactCheck({
-      inputType: "text",
-      text: "A factual statement that needs research.",
-      url: "",
-      idempotencyKey: "00000000-0000-4000-8000-000000000003",
-    })).rejects.toMatchObject({
-      name: "FactCheckAnalysisError",
-      aiUsed: true,
-      code: "ANALYSIS_FAILED",
-    } satisfies Partial<FactCheckAnalysisError>);
-    expect(createResponse).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses supplied context when link extraction fails and therefore calls OpenAI", async () => {
-    retrieveLinkedPage.mockRejectedValueOnce(new Error("Blocked"));
-    createResponse.mockResolvedValueOnce({
-      output_text: JSON.stringify(inaccessibleClassification),
-      output: [],
-    });
-
-    await analyzeFactCheck({
-      inputType: "link",
-      text: "The post claims the event is free.",
-      url: "https://example.com/blocked",
-      idempotencyKey: "00000000-0000-4000-8000-000000000004",
-    });
-
-    expect(createResponse).toHaveBeenCalledTimes(1);
+    await expect(analyzeFactCheck(submission())).rejects.toMatchObject({ aiUsed: true, code: "ANALYSIS_FAILED" } satisfies Partial<FactCheckAnalysisError>);
   });
 });

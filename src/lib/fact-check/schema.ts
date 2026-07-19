@@ -71,12 +71,12 @@ const factCheckSourceSchema = z.object({
 const factCheckEvidenceSchema = z.object({
   sourceUrl: webUrlSchema,
   stance: z.enum(sourceStances),
-  evidenceSummary: z.string().trim().min(1).max(1_500),
+  evidenceSummary: z.string().trim().min(1).max(500),
 });
 
 const factCheckClaimSchema = z.object({
   id: z.string().trim().min(1).max(40),
-  text: z.string().trim().min(1).max(1_000),
+  text: z.string().trim().min(1).max(500),
   claimType: z.enum(claimTypes),
   factCheckable: z.boolean(),
   verdict: z.enum(verdicts),
@@ -108,31 +108,31 @@ export const factCheckClassificationSchema = z.object({
   claimType: z.enum(claimTypes),
   factCheckable: z.boolean(),
   confidenceScore: z.number().int().min(0).max(100),
-  summary: z.string().trim().min(1).max(500),
-  explanation: z.string().trim().min(1).max(2_000),
-  claims: z.array(factCheckClassificationClaimSchema).min(1).max(10),
+  summary: z.string().trim().min(1).max(240),
+  explanation: z.string().trim().min(1).max(600),
+  claims: z.array(factCheckClassificationClaimSchema).min(1).max(5),
 });
 
 const factCheckResearchClaimSchema = z.object({
   text: z.string().trim().min(1).max(1_000),
   claimType: z.enum(claimTypes),
   factCheckable: z.boolean(),
-  reasoning: z.string().trim().min(1).max(3_000),
-  evidence: z.array(factCheckEvidenceSchema).max(20),
+  reasoning: z.string().trim().min(1).max(800),
+  evidence: z.array(factCheckEvidenceSchema).max(8),
 });
 
 export const factCheckResearchSchema = z.object({
   category: z.enum(categories),
   claimType: z.enum(claimTypes),
   factCheckable: z.boolean(),
-  summary: z.string().trim().min(1).max(500),
-  claims: z.array(factCheckResearchClaimSchema).min(1).max(10),
-  analysis: z.string().trim().min(1).max(5_000),
-  evidenceAssessment: z.string().trim().min(1).max(3_000),
-  limitations: z.string().trim().min(1).max(2_000),
-  uncertainties: z.string().trim().min(1).max(2_000),
-  recommendedAction: z.string().trim().min(1).max(2_000),
-  disclaimer: z.string().trim().min(1).max(1_000),
+  summary: z.string().trim().min(1).max(240),
+  claims: z.array(factCheckResearchClaimSchema).min(1).max(5),
+  analysis: z.string().trim().min(1).max(1_200),
+  evidenceAssessment: z.string().trim().min(1).max(800),
+  limitations: z.string().trim().min(1).max(600),
+  uncertainties: z.string().trim().min(1).max(600),
+  recommendedAction: z.string().trim().min(1).max(500),
+  disclaimer: z.string().trim().min(1).max(300),
 });
 
 export const factCheckSubmissionSchema = z

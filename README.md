@@ -8,6 +8,8 @@ See [OBSERVABILITY.md](OBSERVABILITY.md) for the internal admin command center, 
 
 See [AUTHENTICATION.md](AUTHENTICATION.md) for Google, email magic-link/code, phone OTP, session persistence, provider setup, profile synchronization, and security controls.
 
+See [AI_COST_OPTIMIZATION.md](AI_COST_OPTIMIZATION.md) for official model/tool pricing, cost-aware routing, search controls, cache policy, limits, spend telemetry, and unit economics.
+
 ## Private company documentation
 
 The internal company operating system lives locally in `.company/` and is intentionally excluded from Git. It contains confidential strategy, market, financial, legal-risk, operating, and institutional-memory documents. Team members must obtain it through the approved private company vault; never force-add, publish, paste into issues, or include it in support bundles. Start with `.company/README.md` after authorized access is provisioned.
@@ -58,6 +60,15 @@ Requirements: Node.js 22.12 or newer, npm, a Supabase project, an OpenAI API key
 | `ALERT_WEBHOOK_SECRET` | Server only | Optional bearer secret sent to the incident relay |
 | `OPENAI_API_KEY` | Server only | AI requests from the fact-check API |
 | `OPENAI_MODEL` | Server only | Defaults to `gpt-5-nano` |
+| `OPENAI_DEFAULT_FACT_CHECK_MODEL` | Server only | Default grounded model; `gpt-5.4-nano` |
+| `OPENAI_CHEAP_CLASSIFIER_MODEL` | Server only | No-search classifier; `gpt-5-nano` |
+| `OPENAI_WEB_SEARCH_MODEL` | Server only | Normal Responses web-search model; `gpt-5.4-nano` |
+| `OPENAI_HIGH_RISK_MODEL` | Server only | High-risk grounded model; `gpt-5.4-mini` |
+| `ENABLE_WEB_SEARCH` | Server only | Enables externally grounded factual checks |
+| `ENABLE_MODEL_ROUTING` | Server only | Routes high-risk/complex checks to the stronger model |
+| `MAX_FACT_CHECK_INPUT_CHARS` | Server only | Paid/admin analysis character ceiling; Free is capped at 4,000 |
+| `MAX_FACT_CHECK_OUTPUT_TOKENS` | Server only | Research output ceiling; defaults to 3,000 |
+| `FACT_CHECK_CACHE_TTL_HOURS` | Server only | Evergreen exact-result cache TTL |
 | `STRIPE_SECRET_KEY` | Server only | Checkout, portal, and webhook API access |
 | `STRIPE_WEBHOOK_SECRET` | Server only | Verifies Stripe webhook signatures |
 | `STRIPE_STARTER_PRICE_ID` | Server only | Legacy recurring $4.99 Starter price, retained for existing subscribers only |
@@ -97,9 +108,9 @@ Checkout metadata carries the authenticated Supabase user ID. Only signature-ver
 
 ## AI behavior and boundaries
 
-The trust pipeline has two model stages. Classification first separates objective claims from opinion, prediction, satire, rhetoric, belief, humor, and unverifiable content, then decomposes compound inputs into independently checkable claims. Non-factual content receives no truth score and does not trigger web search.
+The trust pipeline has two cost-routed stages. A no-search `gpt-5-nano` classification pass separates objective claims from opinion, prediction, satire, rhetoric, belief, humor, and unverifiable content, then decomposes compound inputs into at most five claims. Non-factual content receives no truth score and never triggers web search.
 
-Factual claims then require Responses API web search with medium reasoning and search context. URL classification is capped at two searches and each of up to two research passes is capped at three, limiting a difficult check to eight paid searches. It seeks multiple independent sources, prioritizes current primary evidence, compares support and contradiction, and applies stricter standards to high-risk categories. Both stages use strict JSON Schema, are validated with Zod, and retry malformed output once.
+Factual claims use the Responses API `web_search` tool once: `gpt-5.4-nano` with low search context and at most two tool calls for normal claims, or `gpt-5.4-mini` with medium context and at most three for high-risk/complex claims. Link text is extracted locally before classification, so links no longer pay for classification search. Both stages use strict JSON Schema and Zod. Malformed output receives one short no-tool JSON repair request rather than a repeated search.
 
 The model does not choose final scores or verdicts. `src/lib/fact-check/trust-engine.ts` intersects every cited URL with actual tool-returned URLs, assigns deterministic source tiers, requires at least two independent directional sources per factual claim, weights Tier 1/2/3 evidence at 3/2/1, calculates truth and confidence scores, caps confidence for high-risk claims without primary evidence, and withholds the overall score when any factual claim remains unresolved. Up to ten verified sources persist with publisher/date/tier metadata and render as clickable evidence.
 

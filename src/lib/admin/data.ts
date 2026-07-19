@@ -134,7 +134,7 @@ export async function getAdminAi(days: number) {
   const admin = createAdminSupabaseClient();
   const { from } = adminDateRange(String(days));
   const [{ data: ai }, { data: searches }] = await Promise.all([
-    admin.from("ai_usage_logs").select("id, user_id, request_id, model, request_type, stage, status, latency_ms, prompt_tokens, cached_prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, retry_count, json_parse_failure, refusal, timed_out, error_code, created_at").gte("created_at", from).order("created_at", { ascending: false }).limit(500),
+    admin.from("ai_usage_logs").select("id, fact_check_log_id, user_id, request_id, model, request_type, stage, status, latency_ms, prompt_tokens, cached_prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, retry_count, json_parse_failure, refusal, timed_out, error_code, metadata, created_at").gte("created_at", from).order("created_at", { ascending: false }).limit(1_000),
     admin.from("web_search_logs").select("id, status, query_count, source_count, citation_count, latency_ms, failure_reason, created_at").gte("created_at", from).order("created_at", { ascending: false }).limit(500),
   ]);
   return { ai: ai || [], searches: searches || [] };

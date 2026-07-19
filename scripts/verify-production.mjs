@@ -31,6 +31,15 @@ const required = {
 };
 
 const optional = {
+  OPENAI_DEFAULT_FACT_CHECK_MODEL: { hint: "expected a model name when set", validate: (value) => !value || value.length > 0 },
+  OPENAI_CHEAP_CLASSIFIER_MODEL: { hint: "expected a model name when set", validate: (value) => !value || value.length > 0 },
+  OPENAI_WEB_SEARCH_MODEL: { hint: "expected a model name when set", validate: (value) => !value || value.length > 0 },
+  OPENAI_HIGH_RISK_MODEL: { hint: "expected a model name when set", validate: (value) => !value || value.length > 0 },
+  ENABLE_WEB_SEARCH: { hint: "expected true or false when set", validate: (value) => !value || /^(true|false)$/i.test(value) },
+  ENABLE_MODEL_ROUTING: { hint: "expected true or false when set", validate: (value) => !value || /^(true|false)$/i.test(value) },
+  MAX_FACT_CHECK_INPUT_CHARS: { hint: "expected a positive integer when set", validate: (value) => !value || /^\d+$/.test(value) && Number(value) > 0 },
+  MAX_FACT_CHECK_OUTPUT_TOKENS: { hint: "expected a positive integer when set", validate: (value) => !value || /^\d+$/.test(value) && Number(value) > 0 },
+  FACT_CHECK_CACHE_TTL_HOURS: { hint: "expected a positive integer when set", validate: (value) => !value || /^\d+$/.test(value) && Number(value) > 0 },
   ALERT_WEBHOOK_URL: { hint: "expected an HTTPS URL when set", validate: (value) => !value || value.startsWith("https://") },
   ALERT_WEBHOOK_SECRET: { hint: "expected at least 24 characters when set", validate: (value) => !value || value.length >= 24 },
   STRIPE_STARTER_PRICE_ID: { hint: "expected legacy price_... when set", validate: (value) => !value || value.startsWith("price_") },

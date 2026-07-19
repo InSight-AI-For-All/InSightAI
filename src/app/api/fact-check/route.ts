@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ConfigurationError } from "@/lib/env";
+import { getServerEnvironment } from "@/lib/env";
 import { analyzeFactCheck, FactCheckAnalysisError } from "@/lib/fact-check/provider";
-import { factCheckSubmissionSchema } from "@/lib/fact-check/schema";
+import { factCheckResultSchema, factCheckSubmissionSchema } from "@/lib/fact-check/schema";
+import { cacheTtlHours, getFactCheckConfig } from "@/lib/fact-check/config";
+import { extractCandidateText, inputLimitForPlan, normalizedContentHash } from "@/lib/fact-check/cost-controls";
 import {
   getRequestId,
   hasValidImageSignature,
@@ -14,6 +17,7 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   completeFactCheckLog,
+  recordAiUsage,
   recordApiRequest,
   recordError,
   recordPerformanceMetric,
@@ -41,6 +45,8 @@ type RateLimit = {
   remaining: number;
   retryAfterSeconds: number;
 };
+
+type UserCostProfile = { plan: string; role: string };
 
 function responseHeaders(requestId: string, headers?: HeadersInit) {
   const result = new Headers(headers);
@@ -78,6 +84,15 @@ async function handlePost(request: NextRequest, requestId: string) {
     if (error instanceof ConfigurationError) return errorResponse(error.message, 503, "NOT_CONFIGURED", requestId);
     throw error;
   }
+
+  const { data: costProfile, error: costProfileError } = await admin
+    .from("profiles")
+    .select("plan, role")
+    .eq("id", user.id)
+    .single();
+  if (costProfileError || !costProfile) return errorResponse("Usage could not be verified.", 500, "USAGE_ERROR", requestId);
+  const profile = costProfile as UserCostProfile;
+  const costConfig = getFactCheckConfig(getServerEnvironment());
 
   const { data: rateLimitData, error: rateLimitError } = await admin.rpc(
     "check_fact_check_rate_limit",
@@ -126,6 +141,9 @@ async function handlePost(request: NextRequest, requestId: string) {
   }
 
   const submission = submissionResult.data;
+  const inputLimit = profile.role === "admin" ? costConfig.maxInputChars : inputLimitForPlan(profile.plan, costConfig.maxInputChars);
+  const reducedText = extractCandidateText(submission.text, inputLimit);
+  const analysisSubmission = { ...submission, text: reducedText.text };
   const rawSessionId = formData.get("telemetrySessionId");
   const sessionId = typeof rawSessionId === "string" && /^[0-9a-f-]{36}$/i.test(rawSessionId) ? rawSessionId : null;
   await recordTelemetryEvent({
@@ -157,9 +175,10 @@ async function handlePost(request: NextRequest, requestId: string) {
     if (!(image instanceof File) || image.size === 0) {
       return errorResponse("Choose a screenshot to analyze.", 400, "IMAGE_REQUIRED", requestId);
     }
-    if (!acceptedImageTypes.has(image.type) || image.size > maxImageBytes) {
+    const planImageLimit = profile.plan === "free" && profile.role !== "admin" ? Math.min(maxImageBytes, 3 * 1024 * 1024) : maxImageBytes;
+    if (!acceptedImageTypes.has(image.type) || image.size > planImageLimit) {
       return errorResponse(
-        "Use a JPG, PNG, or WebP image no larger than 5 MB.",
+        `Use a JPG, PNG, or WebP image no larger than ${Math.round(planImageLimit / 1024 / 1024)} MB.`,
         400,
         "INVALID_IMAGE",
         requestId,
@@ -218,6 +237,36 @@ async function handlePost(request: NextRequest, requestId: string) {
     reservationId: reservation.reservationId,
   });
 
+  const contentHash = normalizedContentHash(submission, imageBytes);
+  const { data: cachedRow } = await admin
+    .from("fact_check_cache")
+    .select("result")
+    .eq("content_hash", contentHash)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  const cachedResult = factCheckResultSchema.safeParse(cachedRow?.result);
+  if (cachedResult.success) {
+    const completionStartedAt = Date.now();
+    const { data: factCheckId, error: completionError } = await admin.rpc("complete_fact_check", {
+      p_user_id: user.id,
+      p_reservation_id: reservation.reservationId,
+      p_input_type: submission.inputType,
+      p_raw_text: submission.text,
+      p_submitted_url: submission.url,
+      p_screenshot_path: "",
+      p_result: cachedResult.data,
+    });
+    if (completionError) return errorResponse("The cached result could not be saved.", 500, "CACHE_SAVE_FAILED", requestId);
+    await Promise.all([
+      admin.rpc("mark_fact_check_cache_hit", { p_content_hash: contentHash }),
+      recordAiUsage({ factCheckLogId, userId: user.id, requestId, model: "cache", requestType: "fact_check", stage: "cache", status: "completed", metadata: { cacheHit: true, route: "cache", plan: profile.plan, inputType: submission.inputType } }),
+      recordPerformanceMetric({ metricName: "database_latency", value: Date.now() - completionStartedAt, route: "/api/fact-check", userId: user.id, context: { sessionId: sessionId || undefined }, metadata: { operation: "complete_cached_fact_check" } }),
+      completeFactCheckLog(factCheckLogId, { factCheckId: factCheckId as string, stage: "cache_hit", status: "completed", durationMs: Date.now() - requestStartedAt, category: cachedResult.data.category, verdict: cachedResult.data.verdict, truthScore: cachedResult.data.truthScore, confidenceScore: cachedResult.data.confidenceScore, metadata: { cacheHit: true, inputType: submission.inputType } }),
+    ]);
+    await recordApiRequest({ endpoint: "/api/fact-check", method: "POST", statusCode: 200, latencyMs: Date.now() - requestStartedAt, userId: user.id, requestId, sessionId, metadata: { inputType: submission.inputType, cacheHit: true } });
+    return NextResponse.json({ factCheckId, reused: true, cached: true }, { headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining), "X-Fact-Check-Cache": "hit" }) });
+  }
+
   const encoder = new TextEncoder();
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let streamOpen = true;
@@ -238,13 +287,14 @@ async function handlePost(request: NextRequest, requestId: string) {
       void (async () => {
         let aiUsed = false;
         try {
-          const imageDataUrl = image instanceof File && imageBytes && submission.inputType === "screenshot"
+          const useImageVision = submission.inputType === "screenshot" && analysisSubmission.text.length < 40;
+          const imageDataUrl = useImageVision && image instanceof File && imageBytes
             ? `data:${image.type};base64,${imageBytes.toString("base64")}`
             : undefined;
           await recordTelemetryEvent({ eventName: "ai_request_started", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType } });
           const result = await analyzeFactCheck(
-            { ...submission, imageDataUrl },
-            { userId: user.id, requestId, factCheckLogId },
+            { ...analysisSubmission, imageDataUrl },
+            { userId: user.id, requestId, factCheckLogId, plan: profile.plan, inputTruncated: reducedText.truncated, maxInputChars: inputLimit },
           );
           aiUsed = true;
           const completionStartedAt = Date.now();
@@ -262,6 +312,16 @@ async function handlePost(request: NextRequest, requestId: string) {
           );
           await recordPerformanceMetric({ metricName: "database_latency", value: Date.now() - completionStartedAt, route: "/api/fact-check", userId: user.id, context: { sessionId: sessionId || undefined }, metadata: { operation: "complete_fact_check" } });
           if (completionError) throw new Error("The result could not be saved.");
+          const ttlHours = cacheTtlHours(result.category, costConfig.cacheTtlHours);
+          await admin.from("fact_check_cache").upsert({
+            content_hash: contentHash,
+            result,
+            input_type: submission.inputType,
+            category: result.category,
+            source_fact_check_id: factCheckId,
+            expires_at: new Date(Date.now() + ttlHours * 3_600_000).toISOString(),
+            updated_at: new Date().toISOString(),
+          });
           await completeFactCheckLog(factCheckLogId, {
             factCheckId: factCheckId as string,
             stage: "completed",
@@ -271,7 +331,7 @@ async function handlePost(request: NextRequest, requestId: string) {
             verdict: result.verdict,
             truthScore: result.truthScore,
             confidenceScore: result.confidenceScore,
-            metadata: { inputType: submission.inputType, sourceCount: result.methodology?.sourceCount || 0 },
+            metadata: { inputType: submission.inputType, sourceCount: result.methodology?.sourceCount || 0, cacheHit: false, inputTruncated: reducedText.truncated },
           });
           await recordTelemetryEvent({ eventName: "result_generated", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType, category: result.category, verdict: result.verdict } });
           await recordTelemetryEvent({ eventName: "fact_check_completed", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType, category: result.category, verdict: result.verdict } });

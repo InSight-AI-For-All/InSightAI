@@ -35,6 +35,24 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5-nano
+      - key: OPENAI_DEFAULT_FACT_CHECK_MODEL
+        value: gpt-5.4-nano
+      - key: OPENAI_CHEAP_CLASSIFIER_MODEL
+        value: gpt-5-nano
+      - key: OPENAI_WEB_SEARCH_MODEL
+        value: gpt-5.4-nano
+      - key: OPENAI_HIGH_RISK_MODEL
+        value: gpt-5.4-mini
+      - key: ENABLE_WEB_SEARCH
+        value: "true"
+      - key: ENABLE_MODEL_ROUTING
+        value: "true"
+      - key: MAX_FACT_CHECK_INPUT_CHARS
+        value: "8000"
+      - key: MAX_FACT_CHECK_OUTPUT_TOKENS
+        value: "3000"
+      - key: FACT_CHECK_CACHE_TTL_HOURS
+        value: "168"
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

@@ -352,3 +352,38 @@ export function buildTrustedFactCheck(
     methodology: resultMethodology,
   };
 }
+
+export function buildUnsearchedFactualResult(classification: FactCheckClassification): FactCheckResult {
+  return {
+    verdict: "Unverifiable",
+    truthScore: null,
+    confidenceScore: Math.min(25, classification.confidenceScore),
+    category: classification.category,
+    claimType: classification.claimType,
+    factCheckable: true,
+    summary: classification.summary,
+    keyClaims: classification.claims.map((claim) => claim.text.slice(0, 500)),
+    claims: classification.claims.map((claim, index) => ({
+      id: `claim-${index + 1}`,
+      text: claim.text,
+      claimType: claim.claimType,
+      factCheckable: claim.factCheckable,
+      verdict: claim.factCheckable ? "Unverifiable" : nonFactualVerdict(claim.claimType),
+      truthScore: null,
+      confidenceScore: claim.factCheckable ? 0 : classification.confidenceScore,
+      reasoning: claim.factCheckable
+        ? "External evidence search is disabled, so this claim was not assigned a factual verdict."
+        : classification.explanation,
+      evidence: [],
+    })),
+    sources: [],
+    analysis: "The content contains factual claims, but external evidence search is disabled for this deployment.",
+    evidenceAssessment: "No external sources were consulted.",
+    scoreRationale: "No truth score was assigned without verified external evidence.",
+    limitations: "This result classifies the claims but does not verify them.",
+    uncertainties: "The claims may be supported or contradicted by evidence that was not searched.",
+    recommendedAction: "Treat the claims as unverified and research them before sharing as fact.",
+    disclaimer: "AI-generated, evidence-assisted analysis may be wrong and is not final authority.",
+    methodology: methodology([], null, false),
+  };
+}

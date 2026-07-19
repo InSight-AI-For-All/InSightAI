@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
+services:
+  - type: web
+    name: insight-ai-for-all
+    runtime: node
+    plan: starter
+    region: ohio
+    branch: main
+    buildCommand: npm ci && npm run verify:production && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 180
+    autoDeployTrigger: checksPass
+    domains:
+      - insightaiforall.com
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.1
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://insightaiforall.com
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5-nano
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_STARTER_PRICE_ID
+        sync: false

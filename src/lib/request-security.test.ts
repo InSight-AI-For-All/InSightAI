@@ -17,6 +17,21 @@ describe("request security", () => {
     expect(isSameOriginRequest(new Request("https://insight.example/api"))).toBe(false);
   });
 
+  it("accepts the actual app origin when local development uses another port", () => {
+    expect(
+      isSameOriginRequest(new Request("http://localhost:3001/api/fact-check", {
+        method: "POST",
+        headers: { origin: "http://localhost:3001" },
+      })),
+    ).toBe(true);
+    expect(
+      isSameOriginRequest(new Request("http://localhost:3001/api/fact-check", {
+        method: "POST",
+        headers: { origin: "http://localhost:3002" },
+      })),
+    ).toBe(false);
+  });
+
   it("rejects oversized or invalid declared body lengths", () => {
     expect(isRequestBodyTooLarge(new Request("https://insight.example", { headers: { "content-length": "101" } }), 100)).toBe(true);
     expect(isRequestBodyTooLarge(new Request("https://insight.example", { headers: { "content-length": "100" } }), 100)).toBe(false);

@@ -12,7 +12,9 @@ export function isSameOriginRequest(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {
-    return new URL(origin).origin === getAppUrl();
+    const requestOrigin = new URL(request.url).origin;
+    const allowedOrigins = new Set([requestOrigin, getAppUrl()]);
+    return allowedOrigins.has(new URL(origin).origin);
   } catch {
     return false;
   }

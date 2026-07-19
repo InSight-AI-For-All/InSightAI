@@ -46,14 +46,15 @@ Status: **NO-GO** until the external launch gates below are completed and re-ver
 - Live OpenAI smoke test: mandatory search, two search actions, three verified sources, two independent publishers, deterministic scoring, and evidence/source URL intersection
 - Opinion smoke test: no web search and no truth score
 - Synthetic production configuration values pass the configuration verifier without exposing real secrets
+- Supabase CLI project linking and terminal migration push verified; all four local/remote migration versions align
+- Distributed rate limiter verified through SQL (requests 1-10 allowed, request 11 denied) and the exact Node admin client; test buckets removed
 
 ## Launch Blockers
 
-1. **Production environment is incomplete.** Current local configuration is missing `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_STARTER_PRICE_ID`; `NEXT_PUBLIC_APP_URL` is intentionally localhost rather than the production HTTPS origin. Real checks and billing cannot be signed off.
-2. **The newest migration is not applied remotely.** The Supabase Dashboard session expired before `20260718034452_harden_fact_check_execution.sql` could be executed. Deploying the current app before that migration would make distributed rate-limit and Stripe sync RPC calls fail.
-3. **Stripe cannot be tested end to end.** Checkout, portal, signed webhook delivery, replay, payment failure state, cancellation, and plan demotion require a coherent Stripe test-mode configuration.
-4. **Plan unit economics are not viable at worst case.** Starter promises 1,000 checks for $4.99 while a compound check may use up to six $0.01 searches, before model tokens and Stripe fees. Pricing, included checks, search budget, or fair-use controls require an explicit business decision.
-5. **Operational/legal controls are external.** Error monitoring, uptime alerts, Supabase backup/restore rehearsal, retention/deletion policy, privacy policy, and counsel review are not verifiable from this repository.
+1. **Production environment is incomplete.** The Supabase service-role and OpenAI keys are configured locally, but `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_STARTER_PRICE_ID` are missing; `NEXT_PUBLIC_APP_URL` is intentionally localhost rather than the production HTTPS origin. Billing cannot be signed off.
+2. **Stripe cannot be tested end to end.** Checkout, portal, signed webhook delivery, replay, payment failure state, cancellation, and plan demotion require a coherent Stripe test-mode configuration.
+3. **Plan unit economics are not viable at worst case.** Starter promises 1,000 checks for $4.99 while a compound check may use up to six $0.01 searches, before model tokens and Stripe fees. Pricing, included checks, search budget, or fair-use controls require an explicit business decision.
+4. **Operational/legal controls are external.** Error monitoring, uptime alerts, Supabase backup/restore rehearsal, retention/deletion policy, privacy policy, and counsel review are not verifiable from this repository.
 
 ## Residual Technical Risk
 
@@ -68,7 +69,7 @@ Status: **NO-GO** until the external launch gates below are completed and re-ver
 Do not launch until all items are checked:
 
 - [ ] Add production values directly to the deployment secret store and run `npm run verify:production` successfully.
-- [ ] Apply all Supabase migrations in timestamp order and verify the new rate-limit and Stripe RPC signatures.
+- [x] Apply all Supabase migrations in timestamp order and verify the new rate-limit and Stripe RPC signatures.
 - [ ] Run signed Stripe test-mode Checkout, portal, webhook replay, failed-payment, and cancellation scenarios.
 - [ ] Decide sustainable pricing/check limits using measured average and p95 searches per completed check.
 - [ ] Configure error monitoring, uptime alerts, log retention, backups, and restore rehearsal.

@@ -15,6 +15,9 @@
 .env*
 !.env.example
 
+# Supabase CLI local project link
+/supabase/.temp/
+
 # logs and editor files
 npm-debug.log*
 *.tsbuildinfo

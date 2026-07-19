@@ -141,6 +141,64 @@ Manual release checks:
 - Configure Supabase backups and perform a restore rehearsal before accepting paid customers.
 - Have counsel review privacy, terms, subscription, and high-impact-domain language.
 
+## Render deployment
+
+The repository includes `render.yaml` for a paid Render Node Web Service. The application is not a static export: Next.js route handlers, middleware, OAuth callbacks, Stripe webhooks, and long-running AI requests require a server runtime.
+
+On Render's **New Web Service** screen, use:
+
+| Setting | Value |
+| --- | --- |
+| Name | `insight-ai-for-all` |
+| Language | `Node` |
+| Branch | `main` |
+| Region | `Ohio (US East)` |
+| Root Directory | Leave blank |
+| Build Command | `npm ci && npm run verify:production && npm run build` |
+| Start Command | `npm start` |
+| Instance Type | `Starter` ($7/month) |
+| Health Check Path | `/api/health` |
+| Pre-Deploy Command | Leave blank; migrations are pushed deliberately with the Supabase CLI |
+| Disk | None; the app stores no runtime files locally |
+| Auto-Deploy | After CI Checks Pass |
+
+Set these Render environment variables before the first successful build:
+
+```env
+NODE_VERSION=22.23.1
+NEXT_PUBLIC_APP_URL=https://insightaiforall.com
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5-nano
+STRIPE_SECRET_KEY=...
+STRIPE_WEBHOOK_SECRET=...
+STRIPE_STARTER_PRICE_ID=...
+```
+
+Do not upload `.env.local` as a secret file. Enter each value in Render's encrypted environment-variable UI. The build intentionally fails if required production values are missing or malformed.
+
+After Render deploys the temporary `onrender.com` URL:
+
+1. Open **Settings > Custom Domains** and add `insightaiforall.com`. Render also handles `www.insightaiforall.com` and provisions TLS.
+2. Add the DNS records Render displays at the domain registrar. Remove conflicting root/`www` records and obsolete `AAAA` records during verification.
+3. In Supabase **Authentication > URL Configuration**, set the Site URL to `https://insightaiforall.com` and add `https://insightaiforall.com/auth/callback` to the redirect allow list. Keep the localhost callback for development.
+4. In Google Cloud, add `https://insightaiforall.com` as an authorized JavaScript origin. Keep `https://indudrpahjfsahyfncxj.supabase.co/auth/v1/callback` as the Google OAuth redirect URI.
+5. In Stripe, register `https://insightaiforall.com/api/stripe/webhook` for subscription created, updated, and deleted events. Use that endpoint's own `whsec_...` value in Render.
+6. Verify `https://insightaiforall.com/api/health` returns `{ "status": "ok" }`, then run the manual release checks below.
+
+Migrations remain a controlled terminal release step:
+
+```bash
+npx supabase login --agent no
+npx supabase link --project-ref indudrpahjfsahyfncxj --agent no
+npx supabase db push --linked --dry-run --agent no
+npx supabase db push --linked --yes --agent no
+```
+
+Do not add Supabase CLI access tokens or database passwords to Render because the application does not need them at runtime.
+
 ## Production verification
 
 Run these checks from a clean checkout with production-equivalent environment values:

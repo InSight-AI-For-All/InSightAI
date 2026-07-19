@@ -4,13 +4,15 @@ import { getServerEnvironment } from "@/lib/env";
 
 export const metadata: Metadata = { title: "New check" };
 
-export default function CheckPage() {
+export default async function CheckPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const environment = getServerEnvironment();
+  const requestedMode = (await searchParams).mode;
+  const initialMode = requestedMode === "link" || requestedMode === "screenshot" ? requestedMode : "text";
   const configured = Boolean(environment.SUPABASE_SERVICE_ROLE_KEY && environment.OPENAI_API_KEY);
   return (
     <>
       <header className="page-heading"><div><p className="eyebrow">New InSight</p><h1>Drop what made you pause.</h1><p>Text, link, or screenshot. We&apos;ll separate the signal from the noise.</p></div></header>
-      <FactCheckForm configured={configured} />
+      <FactCheckForm configured={configured} initialMode={initialMode} />
     </>
   );
 }

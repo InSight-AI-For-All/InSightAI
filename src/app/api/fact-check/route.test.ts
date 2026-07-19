@@ -83,6 +83,17 @@ describe("fact-check request boundary", () => {
     await expect(response.json()).resolves.toMatchObject({ code: "PAYLOAD_TOO_LARGE" });
   });
 
+  it("blocks unauthenticated users from fact checking", async () => {
+    getUser.mockResolvedValueOnce({ data: { user: null } });
+    const response = await POST(new NextRequest("https://insight.example/api/fact-check", {
+      method: "POST",
+      headers: { origin: "https://insight.example" },
+    }));
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("returns JSON when an unexpected authentication error escapes", async () => {
     getUser.mockRejectedValueOnce(new Error("Authentication provider unavailable"));
     const response = await POST(new NextRequest("https://insight.example/api/fact-check", {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, LoaderCircle } from "lucide-react";
 
-export function AccountForm({ fullName, email }: { fullName: string; email: string }) {
+export function AccountForm({ fullName, email, phone, providers }: { fullName: string; email?: string; phone?: string; providers: string[] }) {
   const [name, setName] = useState(fullName);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState("");
@@ -23,5 +23,5 @@ export function AccountForm({ fullName, email }: { fullName: string; email: stri
     }
   }
 
-  return <form onSubmit={save} style={{ display: "grid", gap: 18 }}><div className="form-field"><label htmlFor="full-name">Full name</label><input className="input" id="full-name" value={name} onChange={(event) => { setName(event.target.value); setState("idle"); }} maxLength={100} /></div><div className="form-field"><label htmlFor="email">Email</label><input className="input" id="email" value={email} disabled /></div>{error && <p className="alert" role="alert">{error}</p>}<button className="button" type="submit" disabled={state === "saving" || !name.trim()} style={{ width: "fit-content" }}>{state === "saving" ? <LoaderCircle className="spin" size={17} /> : state === "saved" ? <Check size={17} /> : null}{state === "saved" ? "Saved" : state === "saving" ? "Saving…" : "Save profile"}</button></form>;
+  return <form onSubmit={save} style={{ display: "grid", gap: 18 }}><div className="form-field"><label htmlFor="full-name">Full name</label><input className="input" id="full-name" value={name} onChange={(event) => { setName(event.target.value); setState("idle"); }} maxLength={100} /></div>{email && <div className="form-field"><label htmlFor="email">Email</label><input className="input" id="email" value={email} disabled /></div>}{phone && <div className="form-field"><label htmlFor="phone">Phone</label><input className="input" id="phone" value={phone} disabled /></div>}<div className="form-field"><label>Connected sign-in methods</label><div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{providers.map((provider) => <span className="status-pill" key={provider}>{provider === "phone" ? "SMS" : provider === "email" ? "Email code" : provider[0]?.toUpperCase() + provider.slice(1)}</span>)}</div></div>{error && <p className="alert" role="alert">{error}</p>}<button className="button" type="submit" disabled={state === "saving" || !name.trim()} style={{ width: "fit-content" }}>{state === "saving" ? <LoaderCircle className="spin" size={17} /> : state === "saved" ? <Check size={17} /> : null}{state === "saved" ? "Saved" : state === "saving" ? "Saving…" : "Save profile"}</button></form>;
 }

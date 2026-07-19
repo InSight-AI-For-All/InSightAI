@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnvironment } from "@/lib/env";
 import { fetchWithTimeout } from "@/lib/fetch-timeout";
+import { getLoginDestination, isProtectedAppPath } from "@/lib/auth-redirect";
 
 export async function refreshSession(request: NextRequest) {
   const environment = getPublicSupabaseEnvironment();
@@ -22,6 +23,12 @@ export async function refreshSession(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  const { data } = await supabase.auth.getClaims();
+  if (isProtectedAppPath(request.nextUrl.pathname) && !data?.claims?.sub) {
+    const loginUrl = getLoginDestination(request.nextUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
+  }
   return response;
 }

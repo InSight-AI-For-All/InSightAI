@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AuthProvider } from "@/components/auth-provider";
 import { TelemetryProvider } from "@/components/telemetry-provider";
 import "./globals.css";
 
@@ -51,7 +52,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <link rel="apple-touch-startup-image" href="/brand/marketing/apple-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" />
       </head>
-      <body><TelemetryProvider />{children}</body>
+      <body><AuthProvider><TelemetryProvider />{children}</AuthProvider></body>
     </html>
   );
 }

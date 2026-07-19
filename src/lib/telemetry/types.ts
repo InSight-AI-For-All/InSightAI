@@ -5,6 +5,7 @@ export const publicTelemetryEvents = [
   "session_ended",
   "signup_started",
   "login_started",
+  "login_completed",
   "login_failed",
   "pricing_viewed",
   "upgrade_clicked",

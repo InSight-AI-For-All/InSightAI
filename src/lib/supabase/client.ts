@@ -7,6 +7,8 @@ export function createBrowserSupabaseClient() {
   const environment = getPublicSupabaseEnvironment();
   if (!environment) return null;
 
-  browserClient ??= createBrowserClient(environment.url, environment.anonKey);
+  browserClient ??= createBrowserClient(environment.url, environment.anonKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
   return browserClient;
 }

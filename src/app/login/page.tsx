@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, Check, ShieldCheck } from "lucide-react";
 import { Brand } from "@/components/brand";
-import { GoogleSignIn } from "@/components/google-sign-in";
+import { AuthFlow } from "@/components/auth-flow";
 import { hasSupabaseEnvironment } from "@/lib/env";
+import { getAuthCapabilities } from "@/lib/auth/capabilities";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -13,6 +14,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const parameters = await searchParams;
+  const capabilities = await getAuthCapabilities();
   const nextPath = parameters.next?.startsWith("/") && !parameters.next.startsWith("//") ? parameters.next : "/dashboard";
 
   return (
@@ -35,9 +37,9 @@ export default async function LoginPage({
         <div className="login-form">
           <Brand />
           <h2>Let&apos;s check that post.</h2>
-          <p className="muted">One tap with Google. No password to remember, no card required.</p>
+          <p className="muted">Use Google, email, or your phone. No password to remember.</p>
           {parameters.error && <p className="alert" role="alert">{parameters.error}</p>}
-          <GoogleSignIn nextPath={nextPath} configured={hasSupabaseEnvironment()} />
+          <AuthFlow nextPath={nextPath} configured={hasSupabaseEnvironment()} intent="signin" capabilities={capabilities} />
           <p className="login-legal">By continuing, you agree to the <Link href="/terms">terms and safety notice</Link>.</p>
         </div>
       </section>

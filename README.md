@@ -6,13 +6,15 @@ See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for the current launch st
 
 See [OBSERVABILITY.md](OBSERVABILITY.md) for the internal admin command center, telemetry taxonomy, KPI definitions, privacy controls, alert scheduler, retention policy, and operator runbook.
 
+See [AUTHENTICATION.md](AUTHENTICATION.md) for Google, email magic-link/code, phone OTP, session persistence, provider setup, profile synchronization, and security controls.
+
 ## Private company documentation
 
 The internal company operating system lives locally in `.company/` and is intentionally excluded from Git. It contains confidential strategy, market, financial, legal-risk, operating, and institutional-memory documents. Team members must obtain it through the approved private company vault; never force-add, publish, paste into issues, or include it in support bundles. Start with `.company/README.md` after authorized access is provisioned.
 
 ## Product scope
 
-- Google OAuth through Supabase Auth
+- Google OAuth plus passwordless email and phone OTP through Supabase Auth
 - Text, link, and screenshot analysis through `gpt-5-nano` with web search
 - Strict structured JSON with claim-level findings, verified evidence, source tiers, score rationale, uncertainty, limitations, and next steps
 - Explicit opinion, satire, outdated-context, and unverifiable classifications
@@ -71,13 +73,15 @@ The migrations create `profiles`, `usage_counters`, `fact_checks`, `fact_check_r
 
 The `reserve_fact_check`, `complete_fact_check`, `charge_fact_check_attempt`, and `release_fact_check` functions use per-user PostgreSQL advisory locks. This prevents concurrent requests from exceeding limits. Failures before the first OpenAI request release their reservation; once an OpenAI request starts, the attempt consumes quota even if the pipeline later fails. RLS permits users to read only their records. Column grants permit profile name/avatar updates but not plan changes.
 
-### Google OAuth
+### Authentication providers
 
 1. Create an OAuth 2.0 Web application in Google Cloud Console.
 2. Add the callback shown under **Supabase > Authentication > Providers > Google**, normally `https://<project-ref>.supabase.co/auth/v1/callback`.
 3. Put the Google client ID and secret in the Supabase Google provider settings, not this app's environment.
 4. Set the Supabase Site URL to `NEXT_PUBLIC_APP_URL`.
 5. Allow `http://localhost:3000/auth/callback` and the production `/auth/callback` URL.
+
+Email magic links work through the same callback. To support six-digit email codes, include `{{ .Token }}` in the Supabase Magic Link email template while retaining `{{ .ConfirmationURL }}`. For phone authentication, enable Phone Auth in Supabase and configure a supported SMS provider. See [AUTHENTICATION.md](AUTHENTICATION.md) for templates, rate limits, CAPTCHA guidance, and verification checks.
 
 ## Stripe setup
 

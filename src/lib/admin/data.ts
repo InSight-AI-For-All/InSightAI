@@ -45,7 +45,7 @@ export async function getAdminUsers(filters: { query?: string; plan?: string; ro
   const admin = createAdminSupabaseClient();
   let query = admin
     .from("profiles")
-    .select("id, email, full_name, plan, role, created_at, last_active_at")
+    .select("id, email, phone, full_name, plan, role, auth_provider, auth_providers, created_at, last_active_at")
     .order("created_at", { ascending: false })
     .limit(200);
   if (filters.plan && ["free", "starter", "pro", "max"].includes(filters.plan)) query = query.eq("plan", filters.plan);
@@ -80,7 +80,7 @@ export async function getAdminUsers(filters: { query?: string; plan?: string; ro
 export async function getAdminUserDetail(id: string) {
   const admin = createAdminSupabaseClient();
   const [{ data: profile }, { data: usage }, { data: subscription }, { data: checks }, { data: events }, { data: errors }] = await Promise.all([
-    admin.from("profiles").select("id, email, full_name, plan, role, created_at, updated_at, last_active_at").eq("id", id).maybeSingle(),
+    admin.from("profiles").select("id, email, phone, full_name, plan, role, auth_provider, auth_providers, created_at, updated_at, last_active_at").eq("id", id).maybeSingle(),
     admin.from("usage_counters").select("free_used, monthly_used, reset_at, updated_at").eq("user_id", id).maybeSingle(),
     admin.from("subscriptions").select("plan, status, current_period_start, current_period_end, created_at, updated_at").eq("user_id", id).maybeSingle(),
     admin.from("fact_checks").select("id, input_type, verdict, truth_score, confidence_score, category, claim_type, created_at").eq("user_id", id).order("created_at", { ascending: false }).limit(20),

@@ -44,6 +44,7 @@ const categories: Record<(typeof publicTelemetryEvents)[number], "acquisition" |
   session_ended: "acquisition",
   signup_started: "auth",
   login_started: "auth",
+  login_completed: "auth",
   login_failed: "auth",
   pricing_viewed: "billing",
   upgrade_clicked: "billing",

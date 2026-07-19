@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { startGoogleSignIn } from "@/lib/auth/client";
 import { trackEvent } from "@/lib/telemetry/client";
 
 export function GoogleSignIn({ nextPath, configured }: { nextPath: string; configured: boolean }) {
@@ -21,10 +22,7 @@ export function GoogleSignIn({ nextPath, configured }: { nextPath: string; confi
     setLoading(true);
     setError("");
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
-    const { error: signInError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo },
-    });
+    const { error: signInError } = await startGoogleSignIn(supabase, redirectTo);
 
     if (signInError) {
       trackEvent("login_failed", { provider: "google" });

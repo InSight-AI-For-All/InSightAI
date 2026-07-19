@@ -1,0 +1,24 @@
+.flow { display: grid; gap: 17px; margin-top: 22px; }
+.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: .68rem; text-transform: uppercase; }
+.divider::before, .divider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; border: 1px solid var(--line); padding: 4px; background: rgba(255,255,255,.025); }
+.tabs button { display: flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .76rem; font-weight: 750; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--brand-accent); color: var(--brand-action-ink); }
+.tabs button:disabled { opacity: .48; cursor: not-allowed; }
+.form { display: grid; gap: 14px; }
+.form label { display: grid; gap: 7px; color: var(--muted-strong); font-size: .72rem; font-weight: 750; }
+.form :global(.button) { width: 100%; }
+.hint { margin: -5px 0 0; color: var(--muted); font-size: .66rem; line-height: 1.5; }
+.switch { margin: 0; color: var(--muted); font-size: .73rem; text-align: center; }
+.switch a, .change { color: var(--brand-accent); font-weight: 800; }
+.verify, .verifyLoading { width: min(100%, 430px); text-align: center; }
+.verify { display: grid; gap: 15px; }
+.verify h2 { margin: 3px 0 0; font-size: 2rem; }
+.verify > p { margin: 0; }
+.verifyIcon { display: grid; width: 52px; height: 52px; margin-inline: auto; place-items: center; border: 1px solid rgba(17,184,181,.35); background: rgba(12,166,167,.12); color: var(--brand-accent); font-size: 1.25rem; font-weight: 850; }
+.code { min-height: 58px; font-family: "Space Grotesk Variable", sans-serif; font-size: 1.55rem; letter-spacing: .36em; text-align: center; }
+.resend { display: inline-flex; margin: 0 auto; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--brand-accent); font: inherit; font-size: .72rem; font-weight: 800; cursor: pointer; }
+.resend:disabled { color: var(--muted); cursor: default; }
+.change { width: fit-content; margin: 0 auto; font-size: .68rem; }
+.verifyLoading { display: flex; min-height: 240px; align-items: center; justify-content: center; gap: 10px; color: var(--muted); }
+@media (max-width: 420px) { .code { letter-spacing: .25em; } }

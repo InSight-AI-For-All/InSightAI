@@ -151,47 +151,82 @@ async function handlePost(request: NextRequest, requestId: string) {
     return errorResponse("A usage reservation could not be created.", 500, "USAGE_ERROR", requestId);
   }
 
-  try {
-    const imageDataUrl = image instanceof File && imageBytes && submission.inputType === "screenshot"
-      ? `data:${image.type};base64,${imageBytes.toString("base64")}`
-      : undefined;
+  const encoder = new TextEncoder();
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let streamOpen = true;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (content: string) => {
+        if (!streamOpen) return;
+        try {
+          controller.enqueue(encoder.encode(content));
+        } catch {
+          streamOpen = false;
+        }
+      };
 
-    const result = await analyzeFactCheck({ ...submission, imageDataUrl });
-    const { data: factCheckId, error: completionError } = await admin.rpc(
-      "complete_fact_check",
-      {
-        p_user_id: user.id,
-        p_reservation_id: reservation.reservationId,
-        p_input_type: submission.inputType,
-        p_raw_text: submission.text,
-        p_submitted_url: submission.url,
-        p_screenshot_path: "",
-        p_result: result,
-      },
-    );
-    if (completionError) throw new Error("The result could not be saved.");
+      send(": connected\n\n");
+      heartbeat = setInterval(() => send(": heartbeat\n\n"), 10_000);
 
-    return NextResponse.json({ factCheckId, result }, {
-      status: 201,
-      headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining) }),
-    });
-  } catch (error) {
-    const { error: releaseError } = await admin.rpc("release_fact_check", {
-      p_user_id: user.id,
-      p_reservation_id: reservation.reservationId,
-    });
-    if (releaseError) logServerError("fact_check.reservation_release_failed", { requestId, errorName: releaseError.name });
-    if (error instanceof ConfigurationError) {
-      return errorResponse(error.message, 503, "NOT_CONFIGURED", requestId);
-    }
-    logServerError("fact_check.pipeline_failed", { requestId, errorName: getErrorName(error) });
-    return errorResponse(
-      "We could not complete this check. Your usage was not charged. Please try again.",
-      502,
-      "ANALYSIS_FAILED",
-      requestId,
-    );
-  }
+      void (async () => {
+        try {
+          const imageDataUrl = image instanceof File && imageBytes && submission.inputType === "screenshot"
+            ? `data:${image.type};base64,${imageBytes.toString("base64")}`
+            : undefined;
+          const result = await analyzeFactCheck({ ...submission, imageDataUrl });
+          const { data: factCheckId, error: completionError } = await admin.rpc(
+            "complete_fact_check",
+            {
+              p_user_id: user.id,
+              p_reservation_id: reservation.reservationId,
+              p_input_type: submission.inputType,
+              p_raw_text: submission.text,
+              p_submitted_url: submission.url,
+              p_screenshot_path: "",
+              p_result: result,
+            },
+          );
+          if (completionError) throw new Error("The result could not be saved.");
+          send(`data: ${JSON.stringify({ factCheckId })}\n\n`);
+        } catch (error) {
+          const { error: releaseError } = await admin.rpc("release_fact_check", {
+            p_user_id: user.id,
+            p_reservation_id: reservation.reservationId,
+          });
+          if (releaseError) logServerError("fact_check.reservation_release_failed", { requestId, errorName: releaseError.name });
+          if (error instanceof ConfigurationError) {
+            send(`data: ${JSON.stringify({ error: error.message, code: "NOT_CONFIGURED", requestId })}\n\n`);
+          } else {
+            logServerError("fact_check.pipeline_failed", { requestId, errorName: getErrorName(error) });
+            send(`data: ${JSON.stringify({
+              error: "We could not complete this check. Your usage was not charged. Please try again.",
+              code: "ANALYSIS_FAILED",
+              requestId,
+            })}\n\n`);
+          }
+        } finally {
+          if (heartbeat) clearInterval(heartbeat);
+          if (streamOpen) {
+            streamOpen = false;
+            controller.close();
+          }
+        }
+      })();
+    },
+    cancel() {
+      streamOpen = false;
+      if (heartbeat) clearInterval(heartbeat);
+    },
+  });
+
+  return new Response(stream, {
+    headers: responseHeaders(requestId, {
+      "Cache-Control": "no-cache, no-transform",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "X-Accel-Buffering": "no",
+      "X-RateLimit-Remaining": String(rateLimit.remaining),
+    }),
+  });
 }
 
 export async function POST(request: NextRequest) {

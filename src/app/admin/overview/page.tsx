@@ -1,5 +1,14 @@
 import type { Metadata } from "next";
-import { AdminHeader, AdminPanel, MetricCard, RangeLinks, StatusBadge, formatDuration, formatMoney, formatNumber } from "@/components/admin/admin-ui";
+import {
+  AdminHeader,
+  AdminPanel,
+  MetricCard,
+  RangeLinks,
+  StatusBadge,
+  formatDuration,
+  formatMoney,
+  formatNumber,
+} from "@/components/admin/admin-ui";
 import { AdminTrendChart } from "@/components/admin/admin-trend-chart";
 import { requireAdmin } from "@/lib/admin/auth";
 import { evaluateAdminAlerts } from "@/lib/admin/alerts";
@@ -14,6 +23,69 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   const { days } = adminDateRange((await searchParams).days);
   const overview = await getAdminOverview(days);
   await evaluateAdminAlerts();
-  await recordAdminAudit({ adminUserId: admin.id, action: "admin_page_viewed", targetType: "page", targetId: "overview", metadata: { days } });
-  return <><AdminHeader eyebrow="Company pulse" title="Operations overview" description="Users, product reliability, AI economics, revenue, and system health in one place."><RangeLinks current={days} /></AdminHeader><div className={styles.metricGrid}><MetricCard label="Total users" value={formatNumber(overview.users.total_users)} detail={`${overview.users.new_users_today} joined today`} /><MetricCard label="Daily active" value={formatNumber(overview.active.daily_active_users)} detail={`${overview.active.monthly_active_users} monthly active`} /><MetricCard label="Fact checks" value={formatNumber(overview.factChecks.attempts)} detail={`${overview.factChecks.attempts_today} today`} /><MetricCard label="Success rate" value={`${overview.factChecks.success_rate}%`} detail={`${overview.factChecks.failed} failed`} tone={overview.factChecks.success_rate >= 90 ? "good" : overview.factChecks.success_rate >= 80 ? "warning" : "danger"} /><MetricCard label="Average latency" value={formatDuration(overview.factChecks.average_latency_ms)} detail="Completed fact checks" /><MetricCard label="System health" value={<StatusBadge value={overview.health} />} detail={`${overview.errors.today} errors today`} tone={overview.health === "healthy" ? "good" : overview.health === "degraded" ? "warning" : "danger"} /><MetricCard label="AI requests" value={formatNumber(overview.ai.requests)} detail={`${overview.ai.success_rate}% success`} /><MetricCard label="AI cost" value={`$${Number(overview.ai.estimated_cost_usd).toFixed(2)}`} detail={`${formatNumber(overview.ai.total_tokens)} tokens`} /><MetricCard label="MRR" value={formatMoney(overview.revenue.mrr_cents)} detail={`${overview.revenue.active_subscriptions} paid subscribers`} tone="good" /><MetricCard label="Paid conversion" value={`${overview.conversionRate}%`} detail={`${overview.users.paid_users} paid · ${overview.users.free_users} free`} /><MetricCard label="AI latency" value={formatDuration(overview.ai.average_latency_ms)} detail={`${overview.ai.failed} failed requests`} /><MetricCard label="Most common error" value={overview.errors.mostCommon?.occurrences || 0} detail={overview.errors.mostCommon?.message || "No errors in range"} tone={overview.errors.mostCommon ? "warning" : "good"} /></div><div className={styles.dashboardGrid}><AdminPanel title="Signups" description="New profiles by day"><AdminTrendChart data={overview.trend} dataKey="signups" /></AdminPanel><AdminPanel title="Fact-check attempts" description="Started runs by day"><AdminTrendChart data={overview.trend} dataKey="fact_checks" color="blue" /></AdminPanel><AdminPanel title="Errors" description="Structured errors by day"><AdminTrendChart data={overview.trend} dataKey="errors" color="coral" /></AdminPanel><AdminPanel title="AI cost" description="Estimated OpenAI cost by day"><AdminTrendChart data={overview.trend} dataKey="ai_cost" color="amber" valueFormatter={(value) => `$${value.toFixed(3)}`} /></AdminPanel><AdminPanel title="Recognized revenue" description="Paid invoice events by day"><AdminTrendChart data={overview.trend} dataKey="revenue_cents" color="teal" valueFormatter={formatMoney} /></AdminPanel></div></>;
+  await recordAdminAudit({
+    adminUserId: admin.id,
+    action: "admin_page_viewed",
+    targetType: "page",
+    targetId: "overview",
+    metadata: { days },
+  });
+
+  return (
+    <>
+      <AdminHeader
+        eyebrow="Company pulse"
+        title="Operations overview"
+        description="Users, product reliability, AI economics, revenue, and system health in one place."
+      >
+        <RangeLinks current={days} />
+      </AdminHeader>
+      <div className={styles.metricGrid}>
+        <MetricCard label="Total users" value={formatNumber(overview.users.total_users)} detail={`${overview.users.new_users_today} joined today`} />
+        <MetricCard label="Daily active" value={formatNumber(overview.active.daily_active_users)} detail={`${overview.active.monthly_active_users} monthly active`} />
+        <MetricCard label="Fact checks" value={formatNumber(overview.factChecks.attempts)} detail={`${overview.factChecks.attempts_today} today`} />
+        <MetricCard
+          label="Success rate"
+          value={`${overview.factChecks.success_rate}%`}
+          detail={`${overview.factChecks.failed} failed`}
+          tone={overview.factChecks.success_rate >= 90 ? "good" : overview.factChecks.success_rate >= 80 ? "warning" : "danger"}
+        />
+        <MetricCard label="Average latency" value={formatDuration(overview.factChecks.average_latency_ms)} detail="Completed fact checks" />
+        <MetricCard
+          label="System health"
+          value={<StatusBadge value={overview.health} />}
+          detail={`${overview.errors.today} errors today`}
+          tone={overview.health === "healthy" ? "good" : overview.health === "degraded" ? "warning" : "danger"}
+        />
+        <MetricCard label="AI requests" value={formatNumber(overview.ai.requests)} detail={`${overview.ai.success_rate}% success`} />
+        <MetricCard label="AI cost" value={`$${Number(overview.ai.estimated_cost_usd).toFixed(2)}`} detail={`${formatNumber(overview.ai.total_tokens)} tokens`} />
+        <MetricCard label="MRR" value={formatMoney(overview.revenue.mrr_cents)} detail={`${overview.revenue.active_subscriptions} paid subscribers`} tone="good" />
+        <MetricCard label="Paid conversion" value={`${overview.conversionRate}%`} detail={`${overview.users.paid_users} paid · ${overview.users.free_users} free`} />
+        <MetricCard label="AI latency" value={formatDuration(overview.ai.average_latency_ms)} detail={`${overview.ai.failed} failed requests`} />
+        <MetricCard
+          label="Most common error"
+          value={overview.errors.mostCommon?.occurrences || 0}
+          detail={overview.errors.mostCommon?.message || "No errors in range"}
+          tone={overview.errors.mostCommon ? "warning" : "good"}
+        />
+      </div>
+      <div className={styles.dashboardGrid}>
+        <AdminPanel title="Signups" description="New profiles by day">
+          <AdminTrendChart data={overview.trend} dataKey="signups" />
+        </AdminPanel>
+        <AdminPanel title="Fact-check attempts" description="Started runs by day">
+          <AdminTrendChart data={overview.trend} dataKey="fact_checks" color="blue" />
+        </AdminPanel>
+        <AdminPanel title="Errors" description="Structured errors by day">
+          <AdminTrendChart data={overview.trend} dataKey="errors" color="coral" />
+        </AdminPanel>
+        <AdminPanel title="AI cost" description="Estimated OpenAI cost by day">
+          <AdminTrendChart data={overview.trend} dataKey="ai_cost" color="amber" valueFormat="usd" />
+        </AdminPanel>
+        <AdminPanel title="Recognized revenue" description="Paid invoice events by day">
+          <AdminTrendChart data={overview.trend} dataKey="revenue_cents" color="teal" valueFormat="money" />
+        </AdminPanel>
+      </div>
+    </>
+  );
 }

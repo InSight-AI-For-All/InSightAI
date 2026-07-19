@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ConfigurationError } from "@/lib/env";
-import { analyzeFactCheck } from "@/lib/fact-check/provider";
+import { analyzeFactCheck, FactCheckAnalysisError } from "@/lib/fact-check/provider";
 import { factCheckSubmissionSchema } from "@/lib/fact-check/schema";
 import {
   getRequestId,
@@ -147,6 +147,16 @@ async function handlePost(request: NextRequest, requestId: string) {
       headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining) }),
     });
   }
+  if (reservation.status === "charged") {
+    return NextResponse.json({
+      error: "This AI attempt was already processed and counted toward your plan.",
+      code: "ATTEMPT_ALREADY_CHARGED",
+      charged: true,
+    }, {
+      status: 409,
+      headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining) }),
+    });
+  }
   if (!reservation.reservationId) {
     return errorResponse("A usage reservation could not be created.", 500, "USAGE_ERROR", requestId);
   }
@@ -169,11 +179,13 @@ async function handlePost(request: NextRequest, requestId: string) {
       heartbeat = setInterval(() => send(": heartbeat\n\n"), 10_000);
 
       void (async () => {
+        let aiUsed = false;
         try {
           const imageDataUrl = image instanceof File && imageBytes && submission.inputType === "screenshot"
             ? `data:${image.type};base64,${imageBytes.toString("base64")}`
             : undefined;
           const result = await analyzeFactCheck({ ...submission, imageDataUrl });
+          aiUsed = true;
           const { data: factCheckId, error: completionError } = await admin.rpc(
             "complete_fact_check",
             {
@@ -189,18 +201,41 @@ async function handlePost(request: NextRequest, requestId: string) {
           if (completionError) throw new Error("The result could not be saved.");
           send(`data: ${JSON.stringify({ factCheckId })}\n\n`);
         } catch (error) {
-          const { error: releaseError } = await admin.rpc("release_fact_check", {
+          const chargeAttempt = aiUsed || (error instanceof FactCheckAnalysisError && error.aiUsed);
+          const accountingRpc = chargeAttempt ? "charge_fact_check_attempt" : "release_fact_check";
+          const { error: accountingError } = await admin.rpc(accountingRpc, {
             p_user_id: user.id,
             p_reservation_id: reservation.reservationId,
           });
-          if (releaseError) logServerError("fact_check.reservation_release_failed", { requestId, errorName: releaseError.name });
+          if (accountingError) {
+            logServerError("fact_check.usage_accounting_failed", {
+              requestId,
+              accountingRpc,
+              errorName: accountingError.name,
+            });
+          }
           if (error instanceof ConfigurationError) {
             send(`data: ${JSON.stringify({ error: error.message, code: "NOT_CONFIGURED", requestId })}\n\n`);
+          } else if (error instanceof FactCheckAnalysisError) {
+            logServerError("fact_check.pipeline_failed", {
+              requestId,
+              aiUsed: error.aiUsed,
+              errorName: error.name,
+            });
+            send(`data: ${JSON.stringify({
+              error: error.message,
+              code: error.code,
+              charged: chargeAttempt,
+              requestId,
+            })}\n\n`);
           } else {
             logServerError("fact_check.pipeline_failed", { requestId, errorName: getErrorName(error) });
             send(`data: ${JSON.stringify({
-              error: "We could not complete this check. Your usage was not charged. Please try again.",
+              error: chargeAttempt
+                ? "We could not save this check after AI analysis completed. This attempt counted toward your plan."
+                : "We could not complete this check before AI analysis started. This attempt was not charged.",
               code: "ANALYSIS_FAILED",
+              charged: chargeAttempt,
               requestId,
             })}\n\n`);
           }

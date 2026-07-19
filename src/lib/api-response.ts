@@ -2,6 +2,7 @@ export type FactCheckApiPayload = {
   error?: string;
   code?: string;
   factCheckId?: string;
+  charged?: boolean;
 };
 
 async function readEventStream(response: Response): Promise<FactCheckApiPayload | null> {

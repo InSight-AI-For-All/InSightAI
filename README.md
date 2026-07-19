@@ -57,7 +57,7 @@ Never expose the service-role, OpenAI, Stripe secret, or webhook secret values t
 
 The migrations create `profiles`, `usage_counters`, `fact_checks`, `fact_check_reservations`, `fact_check_rate_limits`, `subscriptions`, and `stripe_webhook_events`. The initial schema retains a private legacy `screenshots` bucket, but current checks do not persist screenshot files. Apply every migration in timestamp order; application code may depend on the newest RPC signature.
 
-The `reserve_fact_check`, `complete_fact_check`, and `release_fact_check` functions use per-user PostgreSQL advisory locks. This prevents concurrent requests from exceeding limits. Failed AI calls release reservations and remove uploaded screenshots. RLS permits users to read only their records. Column grants permit profile name/avatar updates but not plan changes.
+The `reserve_fact_check`, `complete_fact_check`, `charge_fact_check_attempt`, and `release_fact_check` functions use per-user PostgreSQL advisory locks. This prevents concurrent requests from exceeding limits. Failures before the first OpenAI request release their reservation; once an OpenAI request starts, the attempt consumes quota even if the pipeline later fails. RLS permits users to read only their records. Column grants permit profile name/avatar updates but not plan changes.
 
 ### Google OAuth
 
@@ -118,7 +118,7 @@ Manual release checks:
 
 1. Sign in and cancel Google OAuth; verify a clear recovery state.
 2. Submit valid and empty text, valid and malformed URLs, and supported/unsupported screenshots.
-3. Force an OpenAI failure and verify usage remains unchanged.
+3. Force a pre-AI link-extraction failure and verify usage remains unchanged; force a post-request OpenAI failure and verify usage increases once.
 4. Submit opinion, prediction, satire, and vague content; verify no truth score is assigned.
 5. Submit compound and high-risk factual claims; inspect claim decomposition, contradictory evidence, source tiers, uncertainty, and score rationale.
 6. Run five Free checks and verify the sixth is blocked in UI and API.
@@ -221,7 +221,7 @@ Manual release checks must use Stripe test mode and a non-production Supabase pr
 
 - **Checks return `NOT_CONFIGURED`:** verify `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` are server-only and present in the deployed runtime. Run `npm run verify:production`.
 - **Checks return `RATE_LIMIT_UNAVAILABLE`:** apply the latest migrations and confirm the service role can execute `check_fact_check_rate_limit(uuid)`.
-- **Checks return `USAGE_ERROR`:** confirm all migrations were applied in order and inspect the `reserve_fact_check` RPC logs. Failed analyses release reservations and do not consume quota.
+- **Checks return `USAGE_ERROR`:** confirm all migrations were applied in order and inspect the `reserve_fact_check` and `charge_fact_check_attempt` RPC logs. Pre-AI failures release reservations; attempts that reached OpenAI consume quota once.
 - **Google login fails:** confirm the Google redirect is the Supabase `/auth/v1/callback`, the application `/auth/callback` is in Supabase's redirect allow list, and the Site URL matches `NEXT_PUBLIC_APP_URL`.
 - **Billing redirects to unavailable:** verify the Stripe secret key, recurring price ID, Customer Portal configuration, and webhook secret. Use matching test or live values; never mix modes.
 - **Webhook returns 400:** confirm Stripe signs the raw body with the endpoint's exact `whsec_...` secret. A CLI listener has a different secret from a Dashboard endpoint.

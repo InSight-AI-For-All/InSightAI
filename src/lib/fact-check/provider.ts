@@ -38,6 +38,17 @@ type BoundedResponseCreateParams = ResponseCreateParamsNonStreaming & {
 
 const analysisBudgetMilliseconds = 165_000;
 
+export class FactCheckAnalysisError extends Error {
+  constructor(
+    message: string,
+    public readonly aiUsed: boolean,
+    public readonly code: "LINK_CONTENT_UNAVAILABLE" | "ANALYSIS_FAILED",
+  ) {
+    super(message);
+    this.name = "FactCheckAnalysisError";
+  }
+}
+
 function requestOptions(deadline: number, stageMaximumMilliseconds: number) {
   const remaining = deadline - Date.now();
   if (remaining <= 0) {
@@ -157,6 +168,7 @@ async function classifyInput(
   model: string,
   input: AnalysisInput,
   deadline: number,
+  onAiRequest: () => void,
 ) {
   const linkSubmission = input.inputType === "link";
   let totalSearchCalls = 0;
@@ -185,7 +197,9 @@ async function classifyInput(
         include: ["web_search_call.action.sources" as const],
       } : {}),
     };
-    const response = await openai.responses.create(request, requestOptions(deadline, linkSubmission ? 45_000 : 30_000));
+    const options = requestOptions(deadline, linkSubmission ? 45_000 : 30_000);
+    onAiRequest();
+    const response = await openai.responses.create(request, options);
     totalSearchCalls += searchCallCount(response.output);
     for (const source of extractRetrievedSources(response.output)) retrievedSources.set(source.url, source);
     const classification = parseStructured(response.output_text, factCheckClassificationSchema);
@@ -210,6 +224,7 @@ async function researchClaims(
   input: AnalysisInput,
   classification: FactCheckClassification,
   deadline: number,
+  onAiRequest: () => void,
 ) {
   const researchText = [
     describeInput(input),
@@ -245,7 +260,9 @@ async function researchClaims(
         },
       },
     };
-    const response = await openai.responses.create(request, requestOptions(deadline, 120_000));
+    const options = requestOptions(deadline, 120_000);
+    onAiRequest();
+    const response = await openai.responses.create(request, options);
     totalSearchCalls += searchCallCount(response.output);
     const research = parseStructured(response.output_text, factCheckResearchSchema);
     if (!research) continue;
@@ -287,6 +304,7 @@ export async function analyzeFactCheck(input: AnalysisInput) {
   if (!environment.OPENAI_API_KEY) throw new ConfigurationError("OPENAI_API_KEY");
 
   let preparedInput = input;
+  let aiUsed = false;
   if (input.inputType === "link") {
     try {
       const linkedPage = await retrieveLinkedPage(input.url);
@@ -294,49 +312,68 @@ export async function analyzeFactCheck(input: AnalysisInput) {
       logServerInfo("fact_check.link_retrieved", { contentLength: linkedPage.text.length });
     } catch (error) {
       logServerInfo("fact_check.link_unavailable", { errorName: error instanceof Error ? error.name : "UnknownError" });
+      if (!input.text) {
+        throw new FactCheckAnalysisError(
+          "We could not read this linked page. Add the post text or a screenshot and try again. This attempt was not charged.",
+          false,
+          "LINK_CONTENT_UNAVAILABLE",
+        );
+      }
     }
   }
 
-  const openai = new OpenAI({ apiKey: environment.OPENAI_API_KEY });
-  const classificationStage = await classifyInput(
-    openai,
-    environment.OPENAI_MODEL,
-    preparedInput,
-    deadline,
-  );
+  try {
+    const openai = new OpenAI({ apiKey: environment.OPENAI_API_KEY });
+    const markAiUsed = () => { aiUsed = true; };
+    const classificationStage = await classifyInput(
+      openai,
+      environment.OPENAI_MODEL,
+      preparedInput,
+      deadline,
+      markAiUsed,
+    );
 
-  if (!classificationStage.classification.factCheckable) {
-    const result = buildNonFactualResult(classificationStage.classification, {
-      performed: preparedInput.inputType === "link",
-      retrievedSources: classificationStage.retrievedSources,
-    });
-    logCompletion(environment, input, startedAt, classificationStage.attempts, 0, classificationStage.searchCalls, result);
-    return result;
+    if (!classificationStage.classification.factCheckable) {
+      const result = buildNonFactualResult(classificationStage.classification, {
+        performed: preparedInput.inputType === "link",
+        retrievedSources: classificationStage.retrievedSources,
+      });
+      logCompletion(environment, input, startedAt, classificationStage.attempts, 0, classificationStage.searchCalls, result);
+      return result;
+    }
+
+    const researchStage = await researchClaims(
+      openai,
+      environment.OPENAI_MODEL,
+      preparedInput,
+      classificationStage.classification,
+      deadline,
+      markAiUsed,
+    );
+    const candidate = buildTrustedFactCheck(
+      classificationStage.classification,
+      researchStage.research,
+      researchStage.retrievedSources,
+    );
+    const validated = factCheckResultSchema.safeParse(candidate);
+    if (!validated.success) throw new Error("The trust engine produced an invalid result.");
+
+    logCompletion(
+      environment,
+      preparedInput,
+      startedAt,
+      classificationStage.attempts,
+      researchStage.attempts,
+      classificationStage.searchCalls + researchStage.searchCalls,
+      validated.data,
+    );
+    return validated.data;
+  } catch (error) {
+    if (error instanceof ConfigurationError || error instanceof FactCheckAnalysisError) throw error;
+    throw new FactCheckAnalysisError(
+      "We could not complete this check after AI analysis started. This attempt counted toward your plan.",
+      aiUsed,
+      "ANALYSIS_FAILED",
+    );
   }
-
-  const researchStage = await researchClaims(
-    openai,
-    environment.OPENAI_MODEL,
-    preparedInput,
-    classificationStage.classification,
-    deadline,
-  );
-  const candidate = buildTrustedFactCheck(
-    classificationStage.classification,
-    researchStage.research,
-    researchStage.retrievedSources,
-  );
-  const validated = factCheckResultSchema.safeParse(candidate);
-  if (!validated.success) throw new Error("The trust engine produced an invalid result.");
-
-  logCompletion(
-    environment,
-    preparedInput,
-    startedAt,
-    classificationStage.attempts,
-    researchStage.attempts,
-    classificationStage.searchCalls + researchStage.searchCalls,
-    validated.data,
-  );
-  return validated.data;
 }

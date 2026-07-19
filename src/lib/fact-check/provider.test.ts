@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { analyzeFactCheck } from "./provider";
+import { analyzeFactCheck, FactCheckAnalysisError } from "./provider";
 
 const { createResponse, retrieveLinkedPage } = vi.hoisted(() => ({
   createResponse: vi.fn(),
@@ -91,5 +91,54 @@ describe("fact-check provider URL classification", () => {
     expect(request.tool_choice).toBeUndefined();
     expect(retrieveLinkedPage).not.toHaveBeenCalled();
     expect(result.methodology.searchPerformed).toBe(false);
+  });
+
+  it("does not call OpenAI when a contextless linked page cannot be extracted", async () => {
+    retrieveLinkedPage.mockRejectedValueOnce(new Error("Blocked"));
+
+    await expect(analyzeFactCheck({
+      inputType: "link",
+      text: "",
+      url: "https://example.com/blocked",
+      idempotencyKey: "00000000-0000-4000-8000-000000000002",
+    })).rejects.toMatchObject({
+      name: "FactCheckAnalysisError",
+      aiUsed: false,
+      code: "LINK_CONTENT_UNAVAILABLE",
+    } satisfies Partial<FactCheckAnalysisError>);
+    expect(createResponse).not.toHaveBeenCalled();
+  });
+
+  it("marks failures after an OpenAI request as chargeable", async () => {
+    createResponse.mockRejectedValueOnce(new Error("Provider unavailable"));
+
+    await expect(analyzeFactCheck({
+      inputType: "text",
+      text: "A factual statement that needs research.",
+      url: "",
+      idempotencyKey: "00000000-0000-4000-8000-000000000003",
+    })).rejects.toMatchObject({
+      name: "FactCheckAnalysisError",
+      aiUsed: true,
+      code: "ANALYSIS_FAILED",
+    } satisfies Partial<FactCheckAnalysisError>);
+    expect(createResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses supplied context when link extraction fails and therefore calls OpenAI", async () => {
+    retrieveLinkedPage.mockRejectedValueOnce(new Error("Blocked"));
+    createResponse.mockResolvedValueOnce({
+      output_text: JSON.stringify(inaccessibleClassification),
+      output: [],
+    });
+
+    await analyzeFactCheck({
+      inputType: "link",
+      text: "The post claims the event is free.",
+      url: "https://example.com/blocked",
+      idempotencyKey: "00000000-0000-4000-8000-000000000004",
+    });
+
+    expect(createResponse).toHaveBeenCalledTimes(1);
   });
 });

@@ -47,8 +47,7 @@ function errorResponse(message: string, status: number, code: string, requestId:
   });
 }
 
-export async function POST(request: NextRequest) {
-  const requestId = getRequestId(request);
+async function handlePost(request: NextRequest, requestId: string) {
   if (!isSameOriginRequest(request)) {
     return errorResponse("This request origin is not allowed.", 403, "INVALID_ORIGIN", requestId);
   }
@@ -190,6 +189,21 @@ export async function POST(request: NextRequest) {
       "We could not complete this check. Your usage was not charged. Please try again.",
       502,
       "ANALYSIS_FAILED",
+      requestId,
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
+  try {
+    return await handlePost(request, requestId);
+  } catch (error) {
+    logServerError("fact_check.request_failed", { requestId, errorName: getErrorName(error) });
+    return errorResponse(
+      "The check service encountered an unexpected error. Your usage was not charged. Please try again.",
+      500,
+      "INTERNAL_ERROR",
       requestId,
     );
   }

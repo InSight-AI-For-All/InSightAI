@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Check, FileText, Image as ImageIcon, Link2, ScanSearch, Sparkles, Upload, Zap } from "lucide-react";
+import { readFactCheckApiResponse } from "@/lib/api-response";
 import type { InputType } from "@/lib/fact-check/schema";
 import styles from "./fact-check-form.module.css";
 
@@ -21,8 +22,6 @@ const analysisSteps = [
   "Calibrating the confidence score",
   "Building your InSight",
 ];
-
-type ApiError = { error?: string; code?: string };
 
 export function FactCheckForm({ initialMode = "text", configured = true }: { initialMode?: InputType; configured?: boolean }) {
   const router = useRouter();
@@ -94,7 +93,7 @@ export function FactCheckForm({ initialMode = "text", configured = true }: { ini
 
     try {
       const response = await fetch("/api/fact-check", { method: "POST", body: formData });
-      const payload = (await response.json()) as ApiError & { factCheckId?: string };
+      const payload = await readFactCheckApiResponse(response);
       if (response.status === 402 || payload.code === "LIMIT_REACHED") {
         setLimitReached(true);
         return;

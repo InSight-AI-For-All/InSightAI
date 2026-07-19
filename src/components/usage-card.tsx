@@ -3,7 +3,16 @@ import type { getPlan } from "@/lib/plans";
 
 type Plan = ReturnType<typeof getPlan>;
 
-export function UsageCard({ plan, used, remaining }: { plan: Plan; used: number; remaining: number }) {
+export function UsageCard({ plan, used, remaining, unlimited = false }: { plan: Plan; used: number; remaining: number; unlimited?: boolean }) {
+  if (unlimited) {
+    return (
+      <article className="panel metric-card">
+        <span>Admin usage</span>
+        <strong className="metric-value">Unlimited</strong>
+        <p className="muted" style={{ margin: "10px 0 0", fontSize: ".78rem" }}>All fact checks are included at no charge.</p>
+      </article>
+    );
+  }
   const percentage = Math.min(100, Math.round((used / plan.limit) * 100));
   return (
     <article className="panel metric-card">

@@ -108,6 +108,8 @@ where id = '<authenticated-user-uuid>';
 
 Keep admin membership small. To revoke access, set `role = 'user'`. Do not build a client-side role editor.
 
+Administrators receive unlimited internal fact checks without incrementing free or monthly usage counters. The per-user request rate limit still applies to protect the AI pipeline from accidental loops or credential abuse. Removing the admin role immediately restores the account's normal plan quota.
+
 ## Alerts and external delivery
 
 Seeded rules cover fact-check success, AI/search/payment failure rates, API p95 latency, and application error volume. Admins can change thresholds, rolling windows, severity, and enabled state in `/admin/settings`; every mutation is audited.

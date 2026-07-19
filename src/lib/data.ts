@@ -121,7 +121,7 @@ export async function getDashboardOverview(userId: string) {
   if (!supabase) throw new ConfigurationError("Supabase");
 
   const [profileResponse, usageResponse, checks] = await Promise.all([
-    supabase.from("profiles").select("full_name, plan").eq("id", userId).maybeSingle(),
+    supabase.from("profiles").select("full_name, plan, role").eq("id", userId).maybeSingle(),
     supabase
       .from("usage_counters")
       .select("free_used, monthly_used, reset_at")
@@ -137,6 +137,7 @@ export async function getDashboardOverview(userId: string) {
   }
 
   const plan = getPlan(profileResponse.data.plan);
+  const unlimitedUsage = profileResponse.data.role === "admin";
   const monthlyUsageExpired = new Date(usageResponse.data.reset_at).getTime() <= Date.now();
   const used = plan.id !== "free" && !monthlyUsageExpired
     ? usageResponse.data.monthly_used
@@ -148,6 +149,7 @@ export async function getDashboardOverview(userId: string) {
   return {
     fullName: profileResponse.data.full_name as string | null,
     plan,
+    unlimitedUsage,
     used,
     remaining: Math.max(0, plan.limit - used),
     totalChecks: checks.length,

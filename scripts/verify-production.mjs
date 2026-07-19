@@ -1,35 +1,41 @@
 const required = {
-  NEXT_PUBLIC_APP_URL: (value) => {
-    try {
-      const url = new URL(value);
-      return url.protocol === "https:" && !["localhost", "127.0.0.1"].includes(url.hostname);
-    } catch {
-      return false;
-    }
+  NEXT_PUBLIC_APP_URL: {
+    hint: "expected a public HTTPS origin such as https://insightaiforall.com",
+    validate: (value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && !["localhost", "127.0.0.1"].includes(url.hostname) && url.origin === value.replace(/\/$/, "");
+      } catch {
+        return false;
+      }
+    },
   },
-  NEXT_PUBLIC_SUPABASE_URL: (value) => {
-    try {
-      const url = new URL(value);
-      return url.protocol === "https:" && !["localhost", "127.0.0.1"].includes(url.hostname);
-    } catch {
-      return false;
-    }
+  NEXT_PUBLIC_SUPABASE_URL: {
+    hint: "expected the HTTPS Supabase project URL",
+    validate: (value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && !["localhost", "127.0.0.1"].includes(url.hostname);
+      } catch {
+        return false;
+      }
+    },
   },
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: (value) => value.startsWith("sb_publishable_") || value.startsWith("eyJ"),
-  SUPABASE_SERVICE_ROLE_KEY: (value) => value.startsWith("sb_secret_") || value.startsWith("eyJ"),
-  OPENAI_API_KEY: (value) => value.startsWith("sk-"),
-  OPENAI_MODEL: (value) => value.length > 0,
-  STRIPE_SECRET_KEY: (value) => /^sk_(test|live)_/.test(value),
-  STRIPE_WEBHOOK_SECRET: (value) => value.startsWith("whsec_"),
-  STRIPE_STARTER_PRICE_ID: (value) => value.startsWith("price_"),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: { hint: "expected sb_publishable_...", validate: (value) => value.startsWith("sb_publishable_") || value.startsWith("eyJ") },
+  SUPABASE_SERVICE_ROLE_KEY: { hint: "expected sb_secret_...", validate: (value) => value.startsWith("sb_secret_") || value.startsWith("eyJ") },
+  OPENAI_API_KEY: { hint: "expected sk-...", validate: (value) => value.startsWith("sk-") },
+  OPENAI_MODEL: { hint: "expected a model name", validate: (value) => value.length > 0 },
+  STRIPE_SECRET_KEY: { hint: "expected sk_test_... or sk_live_...", validate: (value) => /^sk_(test|live)_/.test(value) },
+  STRIPE_WEBHOOK_SECRET: { hint: "expected whsec_...", validate: (value) => value.startsWith("whsec_") },
+  STRIPE_STARTER_PRICE_ID: { hint: "expected price_...", validate: (value) => value.startsWith("price_") },
 };
 
 const failures = Object.entries(required)
-  .filter(([name, validate]) => !validate(process.env[name] || ""))
-  .map(([name]) => name);
+  .filter(([name, setting]) => !setting.validate((process.env[name] || "").trim()))
+  .map(([name, setting]) => `${name} (${setting.hint})`);
 
 if (failures.length > 0) {
-  console.error(`Production configuration is incomplete or invalid: ${failures.join(", ")}`);
+  console.error(`Production configuration is incomplete or invalid:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
 

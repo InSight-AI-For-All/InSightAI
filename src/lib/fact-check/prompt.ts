@@ -11,7 +11,7 @@ const claimClassificationSchema = {
   required: ["text", "claimType", "factCheckable"],
 } as const;
 
-export const factCheckClassificationPrompt = `You are the classification and claim-decomposition stage for InSight AI. Do not fact-check, search, or issue a truth verdict in this stage.
+export const factCheckClassificationPrompt = `You are the classification and claim-decomposition stage for InSight AI. Do not fact-check or issue a truth verdict in this stage. Do not search unless URL-specific instructions below explicitly require it.
 
 Your tasks:
 1. Identify whether the input contains objective factual claims, subjective opinion, prediction/speculation, satire/meme, political rhetoric, personal belief, moral judgment, joke/humor, or content that cannot be verified.
@@ -22,6 +22,16 @@ Your tasks:
 6. For allegations about people, preserve attribution and neutral wording. Do not repeat an allegation as fact.
 
 The overall factCheckable field is true when at least one decomposed claim is fact-checkable. confidenceScore measures confidence in this classification only, not truth. Return only the requested JSON.`;
+
+export const factCheckLinkClassificationPrompt = `${factCheckClassificationPrompt}
+
+This input is a submitted URL. You must use web search before classifying it.
+1. Search the exact submitted URL first and inspect any accessible page content, title, metadata, caption, transcript, snippets, or indexed copy.
+2. Extract claims made by the linked post or article itself. The URL string is not the claim.
+3. User-provided context may focus the analysis, but do not require context when the linked content exposes a claim.
+4. Do not conclude that no claim was supplied merely because the input contains only a URL.
+5. If the linked content cannot be accessed after searching, classify it as Unverifiable and state specifically that the page content could not be retrieved. Never claim that the user failed to provide a textual claim.
+6. Do not fact-check or issue a truth verdict in this stage. Research of extracted factual claims happens next.`;
 
 export const factCheckClassificationJsonSchema = {
   type: "object",

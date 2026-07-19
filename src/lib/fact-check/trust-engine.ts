@@ -135,8 +135,23 @@ function methodology(sources: FactCheckSource[], retrievedAt: string | null, sea
   };
 }
 
-export function buildNonFactualResult(classification: FactCheckClassification): FactCheckResult {
+export function buildNonFactualResult(
+  classification: FactCheckClassification,
+  search?: { performed: boolean; retrievedSources: RetrievedSource[] },
+): FactCheckResult {
   const verdict = nonFactualVerdict(classification.claimType);
+  const retrievedAt = search?.performed ? new Date().toISOString() : null;
+  const sources = (search?.retrievedSources || []).slice(0, 10).map((source) => {
+    const ranking = rankSource(source.url);
+    return {
+      title: source.title.slice(0, 500),
+      publisher: new URL(source.url).hostname.replace(/^www\./, "").slice(0, 300),
+      publicationDate: null,
+      url: source.url,
+      retrievedAt,
+      ...ranking,
+    } satisfies FactCheckSource;
+  });
   return {
     verdict,
     truthScore: null,
@@ -157,7 +172,7 @@ export function buildNonFactualResult(classification: FactCheckClassification): 
       reasoning: classification.explanation,
       evidence: [],
     })),
-    sources: [],
+    sources,
     analysis: classification.explanation,
     evidenceAssessment: "No factual verdict was issued because the content was classified as non-factual or not currently verifiable.",
     scoreRationale: "No truth score was assigned. Truth scores apply only to claims that can be checked against external evidence.",
@@ -165,7 +180,7 @@ export function buildNonFactualResult(classification: FactCheckClassification): 
     uncertainties: "The intended tone or context may differ from the text or image alone.",
     recommendedAction: "Treat this content as opinion, rhetoric, humor, or speculation rather than verified fact. Look for a specific factual claim before relying on it.",
     disclaimer: "This is AI-generated, evidence-assisted analysis that may be wrong and is not final authority.",
-    methodology: methodology([], null, false),
+    methodology: methodology(sources, retrievedAt, search?.performed || false),
   };
 }
 

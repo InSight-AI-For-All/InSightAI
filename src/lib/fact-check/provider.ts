@@ -7,6 +7,7 @@ import type { ZodType } from "zod";
 import { ConfigurationError, getServerEnvironment } from "@/lib/env";
 import {
   factCheckClassificationJsonSchema,
+  factCheckLinkClassificationPrompt,
   factCheckClassificationPrompt,
   factCheckResearchJsonSchema,
   factCheckResearchPrompt,
@@ -150,14 +151,18 @@ function logCompletion(
 async function classifyInput(
   openai: OpenAI,
   model: string,
-  content: ReturnType<typeof createContent>,
+  input: AnalysisInput,
   deadline: number,
 ) {
+  const linkSubmission = input.inputType === "link";
+  let totalSearchCalls = 0;
+  const retrievedSources = new Map<string, RetrievedSource>();
+
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const response = await openai.responses.create({
+    const request: BoundedResponseCreateParams = {
       model,
-      instructions: factCheckClassificationPrompt,
-      input: [{ role: "user", content }],
+      instructions: linkSubmission ? factCheckLinkClassificationPrompt : factCheckClassificationPrompt,
+      input: [{ role: "user", content: createContent(describeInput(input), input.imageDataUrl) }],
       reasoning: { effort: "low" },
       store: false,
       max_output_tokens: 4_000,
@@ -169,7 +174,16 @@ async function classifyInput(
           schema: factCheckClassificationJsonSchema,
         },
       },
-    }, requestOptions(deadline, 30_000));
+      ...(linkSubmission ? {
+        tools: [{ type: "web_search" as const, search_context_size: "medium" as const }],
+        tool_choice: "required" as const,
+        max_tool_calls: 3,
+        include: ["web_search_call.action.sources" as const],
+      } : {}),
+    };
+    const response = await openai.responses.create(request, requestOptions(deadline, linkSubmission ? 45_000 : 30_000));
+    totalSearchCalls += searchCallCount(response.output);
+    for (const source of extractRetrievedSources(response.output)) retrievedSources.set(source.url, source);
     const classification = parseStructured(response.output_text, factCheckClassificationSchema);
     if (classification) {
       return {
@@ -178,6 +192,8 @@ async function classifyInput(
           factCheckable: classification.claims.some((claim) => claim.factCheckable),
         } satisfies FactCheckClassification,
         attempts: attempt,
+        searchCalls: totalSearchCalls,
+        retrievedSources: Array.from(retrievedSources.values()),
       };
     }
   }
@@ -270,13 +286,16 @@ export async function analyzeFactCheck(input: AnalysisInput) {
   const classificationStage = await classifyInput(
     openai,
     environment.OPENAI_MODEL,
-    createContent(describeInput(input), input.imageDataUrl),
+    input,
     deadline,
   );
 
   if (!classificationStage.classification.factCheckable) {
-    const result = buildNonFactualResult(classificationStage.classification);
-    logCompletion(environment, input, startedAt, classificationStage.attempts, 0, 0, result);
+    const result = buildNonFactualResult(classificationStage.classification, {
+      performed: input.inputType === "link",
+      retrievedSources: classificationStage.retrievedSources,
+    });
+    logCompletion(environment, input, startedAt, classificationStage.attempts, 0, classificationStage.searchCalls, result);
     return result;
   }
 
@@ -301,7 +320,7 @@ export async function analyzeFactCheck(input: AnalysisInput) {
     startedAt,
     classificationStage.attempts,
     researchStage.attempts,
-    researchStage.searchCalls,
+    classificationStage.searchCalls + researchStage.searchCalls,
     validated.data,
   );
   return validated.data;

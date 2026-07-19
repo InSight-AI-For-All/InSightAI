@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { analyzeFactCheck } from "./provider";
 
-const { createResponse } = vi.hoisted(() => ({
+const { createResponse, retrieveLinkedPage } = vi.hoisted(() => ({
   createResponse: vi.fn(),
+  retrieveLinkedPage: vi.fn(),
 }));
 
 vi.mock("openai", () => ({
@@ -10,6 +11,8 @@ vi.mock("openai", () => ({
     responses = { create: createResponse };
   },
 }));
+
+vi.mock("@/lib/fact-check/linked-page", () => ({ retrieveLinkedPage }));
 
 const inaccessibleClassification = {
   category: "General",
@@ -28,6 +31,11 @@ const inaccessibleClassification = {
 describe("fact-check provider URL classification", () => {
   beforeEach(() => {
     createResponse.mockReset();
+    retrieveLinkedPage.mockReset();
+    retrieveLinkedPage.mockResolvedValue({
+      url: "https://www.instagram.com/p/example/embed/captioned/",
+      text: "The post claims a free public concert will be held at Piedmont Park.",
+    });
     vi.stubEnv("OPENAI_API_KEY", "sk-test");
     vi.stubEnv("OPENAI_MODEL", "gpt-5-nano");
   });
@@ -57,6 +65,9 @@ describe("fact-check provider URL classification", () => {
     expect(request.max_tool_calls).toBe(3);
     expect(request.instructions).toContain("Search the exact submitted URL first");
     expect(request.input[0].content[0].text).toContain("https://www.instagram.com/p/example/");
+    expect(request.input[0].content[0].text).toContain("free public concert");
+    expect(request.input[0].content[0].text).toContain("untrusted data");
+    expect(retrieveLinkedPage).toHaveBeenCalledWith("https://www.instagram.com/p/example/");
     expect(result.methodology).toMatchObject({ searchPerformed: true, sourceCount: 1 });
     expect(result.sources[0]?.url).toBe("https://www.instagram.com/p/example/");
     expect(result.summary).not.toContain("no accompanying textual claim");
@@ -78,6 +89,7 @@ describe("fact-check provider URL classification", () => {
     const request = createResponse.mock.calls[0][0];
     expect(request.tools).toBeUndefined();
     expect(request.tool_choice).toBeUndefined();
+    expect(retrieveLinkedPage).not.toHaveBeenCalled();
     expect(result.methodology.searchPerformed).toBe(false);
   });
 });

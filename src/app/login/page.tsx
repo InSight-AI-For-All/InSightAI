@@ -22,9 +22,9 @@ export default async function LoginPage({
         <div>
           <p className="eyebrow">Your clearer feed starts here</p>
           <h1>Your feed has questions. Bring them.</h1>
-          <p>Five free checks. Every score, explanation, and next step saved privately.</p>
+          <p>Three free checks. Every score, explanation, and next step saved privately.</p>
           <ul>
-            <li><Check size={18} /> Five free evidence-assisted checks</li>
+            <li><Check size={18} /> Three free evidence-assisted checks</li>
             <li><Check size={18} /> Private, searchable history</li>
             <li><Check size={18} /> Text, links, and screenshots</li>
           </ul>

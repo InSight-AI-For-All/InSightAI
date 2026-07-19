@@ -112,7 +112,7 @@ export function FactCheckForm({ initialMode = "text", configured = true }: { ini
   }
 
   if (limitReached) {
-    return <div className={`panel ${styles.paywall}`}><div className={styles.paywallGlow}><Zap size={28} /></div><div><span className="status-pill"><Sparkles size={15} /> Free checks used</span><h2>Your curiosity has momentum.</h2><p>Starter unlocks 1,000 checks every month for $4.99, so the next suspicious post never gets a free pass.</p><Link className="button" href="/pricing">Unlock Starter <ArrowRight size={17} /></Link></div></div>;
+    return <div className={`panel ${styles.paywall}`}><div className={styles.paywallGlow}><Zap size={28} /></div><div><span className="status-pill"><Sparkles size={15} /> Plan checks used</span><h2>Your curiosity has momentum.</h2><p>Starter begins at $3.99 for 20 monthly checks, with higher-volume plans when you need them.</p><Link className="button" href="/pricing">Compare plans <ArrowRight size={17} /></Link></div></div>;
   }
 
   const activeMode = modes.find((item) => item.id === mode)!;

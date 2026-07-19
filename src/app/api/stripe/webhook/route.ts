@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { z } from "zod";
 import { getServerEnvironment } from "@/lib/env";
+import { getPaidPlanForStripePrice } from "@/lib/plans";
 import { getRequestId, isRequestBodyTooLarge } from "@/lib/request-security";
 import { getErrorName, logServerError } from "@/lib/server-log";
 import { createStripeClient } from "@/lib/stripe";
@@ -21,13 +22,22 @@ async function syncSubscription(subscription: Stripe.Subscription, eventId: stri
   const period = subscription.items.data[0]?.current_period_end;
   const periodStart = subscription.items.data[0]?.current_period_start;
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+  const priceId = subscription.items.data[0]?.price.id;
+  const environment = getServerEnvironment();
+  const paidPlan = priceId ? getPaidPlanForStripePrice(priceId, {
+    starter: environment.STRIPE_STARTER_399_PRICE_ID,
+    legacyStarter: environment.STRIPE_STARTER_PRICE_ID,
+    pro: environment.STRIPE_PRO_PRICE_ID,
+    max: environment.STRIPE_MAX_PRICE_ID,
+  }) : null;
+  if (active && !paidPlan) throw new Error("The subscription price is not configured for a plan.");
 
   const { error } = await admin.rpc("sync_stripe_subscription", {
     p_event_id: eventId,
     p_user_id: userId,
     p_customer_id: customerId,
     p_subscription_id: subscription.id,
-    p_plan: active ? "starter" : "free",
+    p_plan: active ? paidPlan : "free",
     p_status: subscription.status,
     p_period_start: timestampToIso(periodStart),
     p_period_end: timestampToIso(period),

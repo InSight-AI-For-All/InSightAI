@@ -27,10 +27,16 @@ const required = {
   OPENAI_MODEL: { hint: "expected a model name", validate: (value) => value.length > 0 },
   STRIPE_SECRET_KEY: { hint: "expected sk_test_... or sk_live_...", validate: (value) => /^sk_(test|live)_/.test(value) },
   STRIPE_WEBHOOK_SECRET: { hint: "expected whsec_...", validate: (value) => value.startsWith("whsec_") },
-  STRIPE_STARTER_PRICE_ID: { hint: "expected price_...", validate: (value) => value.startsWith("price_") },
 };
 
-const failures = Object.entries(required)
+const optional = {
+  STRIPE_STARTER_PRICE_ID: { hint: "expected legacy price_... when set", validate: (value) => !value || value.startsWith("price_") },
+  STRIPE_STARTER_399_PRICE_ID: { hint: "expected price_... when set", validate: (value) => !value || value.startsWith("price_") },
+  STRIPE_PRO_PRICE_ID: { hint: "expected price_... when set", validate: (value) => !value || value.startsWith("price_") },
+  STRIPE_MAX_PRICE_ID: { hint: "expected price_... when set", validate: (value) => !value || value.startsWith("price_") },
+};
+
+const failures = [...Object.entries(required), ...Object.entries(optional)]
   .filter(([name, setting]) => !setting.validate((process.env[name] || "").trim()))
   .map(([name, setting]) => `${name} (${setting.hint})`);
 

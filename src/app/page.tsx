@@ -36,7 +36,7 @@ export default function HomePage() {
                 <Link className="button" href="/login">InSight a post <ArrowRight size={18} /></Link>
                 <Link className="button secondary" href="#live-demo">Watch it work</Link>
               </div>
-              <div className={styles.heroTrust}><span><ShieldCheck size={15} /> 5 free checks</span><span><Sparkles size={15} /> No card</span><span><CircleCheckBig size={15} /> Private by default</span></div>
+              <div className={styles.heroTrust}><span><ShieldCheck size={15} /> 3 free checks</span><span><Sparkles size={15} /> No card</span><span><CircleCheckBig size={15} /> Private by default</span></div>
             </div>
             <div id="live-demo"><LandingLiveDemo /></div>
           </div>
@@ -78,8 +78,10 @@ export default function HomePage() {
           <div className="container">
             <div className={styles.sectionIntro}><p className="eyebrow">Less than one coffee</p><h2>Make checking a habit.</h2><p>Try every input type free. Upgrade when your curiosity becomes part of your daily scroll.</p></div>
             <div className={styles.pricingGrid}>
-              <article className={styles.priceCard}><div><small>FREE</small><h3>$0</h3><p>Five complete checks. No card.</p></div><ul><li><Check size={17} /> Text, links, screenshots</li><li><Check size={17} /> Full scores and analysis</li><li><Check size={17} /> Private history</li></ul><Link className="button secondary" href="/login">Start with 5 free</Link></article>
-              <article className={`${styles.priceCard} ${styles.featured}`}><span className={styles.popular}>DAILY SCROLLER</span><div><small>STARTER</small><h3>$4.99 <em>/ month</em></h3><p>Less than 1¢ per check.</p></div><ul><li><Check size={17} /> 1,000 checks monthly</li><li><Check size={17} /> Every analysis saved</li><li><Check size={17} /> Cancel any time</li></ul><Link className="button" href="/pricing">Get Starter <ArrowRight size={17} /></Link></article>
+              <article className={styles.priceCard}><div><small>FREE</small><h3>$0</h3><p>Three complete checks. No card.</p></div><ul><li><Check size={17} /> Text, links, screenshots</li><li><Check size={17} /> Full scores and analysis</li><li><Check size={17} /> Private history</li></ul><Link className="button secondary" href="/login">Start with 3 free</Link></article>
+              <article className={styles.priceCard}><div><small>STARTER</small><h3>$3.99 <em>/ month</em></h3><p>20 checks for a light weekly habit.</p></div><ul><li><Check size={17} /> Same complete analysis</li><li><Check size={17} /> Monthly refresh</li><li><Check size={17} /> Cancel any time</li></ul><Link className="button secondary" href="/pricing">See Starter</Link></article>
+              <article className={`${styles.priceCard} ${styles.featured}`}><span className={styles.popular}>BEST VALUE</span><div><small>PRO</small><h3>$12.99 <em>/ month</em></h3><p>80 checks for daily research.</p></div><ul><li><Check size={17} /> About 16¢ per included check</li><li><Check size={17} /> Every analysis saved</li><li><Check size={17} /> Change plans any time</li></ul><Link className="button" href="/pricing">See all plans <ArrowRight size={17} /></Link></article>
+              <article className={styles.priceCard}><div><small>MAX</small><h3>$24.99 <em>/ month</em></h3><p>180 checks for high-volume use.</p></div><ul><li><Check size={17} /> Up to six checks per day</li><li><Check size={17} /> No surprise overages</li><li><Check size={17} /> Same evidence standards</li></ul><Link className="button secondary" href="/pricing">See Max</Link></article>
             </div>
           </div>
         </section>
@@ -92,7 +94,7 @@ export default function HomePage() {
           <div className={`container ${styles.faqGrid}`}><div className={styles.sectionIntro}><p className="eyebrow">Questions are the point</p><h2>Good things to ask.</h2></div><div className={styles.faqList}><details><summary>Does InSight decide absolute truth?</summary><p>No. It gives evidence-assisted analysis with confidence and limitations, not a declaration of final truth.</p></details><details><summary>Does InSight open every link?</summary><p>InSight searches the web and may open relevant pages, but paywalls, login requirements, robots rules, or indexing gaps can prevent access. Those limits are called out in the result.</p></details><details><summary>Can it detect opinion, memes, or satire?</summary><p>Yes. Non-factual content is classified directly instead of being forced into a misleading true-or-false result.</p></details><details><summary>Are screenshots private?</summary><p>Screenshots are processed for analysis without being persisted by the application. Share cards do not publish private result URLs.</p></details></div></div>
         </section>
 
-        <section className={styles.finalCta}><div className="container"><span><ScanSearch size={28} /></span><h2>The next viral post is already loading.</h2><p>Know before you share.</p><Link className="button" href="/login">Get your 5 free checks <ArrowRight size={18} /></Link></div></section>
+        <section className={styles.finalCta}><div className="container"><span><ScanSearch size={28} /></span><h2>The next viral post is already loading.</h2><p>Know before you share.</p><Link className="button" href="/login">Get your 3 free checks <ArrowRight size={18} /></Link></div></section>
       </main>
       <SiteFooter />
     </>

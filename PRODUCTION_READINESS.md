@@ -51,9 +51,9 @@ Status: **NO-GO** until the external launch gates below are completed and re-ver
 
 ## Launch Blockers
 
-1. **Production environment is incomplete.** The Supabase service-role and OpenAI keys are configured locally, but `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_STARTER_PRICE_ID` are missing; `NEXT_PUBLIC_APP_URL` is intentionally localhost rather than the production HTTPS origin. Billing cannot be signed off.
+1. **New Stripe prices require configuration.** Create the $3.99 Starter, $12.99 Pro, and $24.99 Max recurring prices and set their three deployment price IDs before enabling checkout buttons.
 2. **Stripe cannot be tested end to end.** Checkout, portal, signed webhook delivery, replay, payment failure state, cancellation, and plan demotion require a coherent Stripe test-mode configuration.
-3. **Plan unit economics are not viable at worst case.** Starter promises 1,000 checks for $4.99 while a compound check may use up to six $0.01 searches, before model tokens and Stripe fees. Pricing, included checks, search budget, or fair-use controls require an explicit business decision.
+3. **Unit economics require monitoring.** Plans are capped at 20/80/180 monthly checks and each difficult check is bounded to eight web searches. Alert if average cost exceeds $0.05/check or p95 exceeds $0.08/check.
 4. **Operational/legal controls are external.** Error monitoring, uptime alerts, Supabase backup/restore rehearsal, retention/deletion policy, privacy policy, and counsel review are not verifiable from this repository.
 
 ## Residual Technical Risk
@@ -71,7 +71,7 @@ Do not launch until all items are checked:
 - [ ] Add production values directly to the deployment secret store and run `npm run verify:production` successfully.
 - [x] Apply all Supabase migrations in timestamp order and verify the new rate-limit and Stripe RPC signatures.
 - [ ] Run signed Stripe test-mode Checkout, portal, webhook replay, failed-payment, and cancellation scenarios.
-- [ ] Decide sustainable pricing/check limits using measured average and p95 searches per completed check.
+- [x] Set sustainable launch limits at 20/80/180 paid checks and cap difficult checks at eight searches; re-evaluate after 500 production checks.
 - [ ] Configure error monitoring, uptime alerts, log retention, backups, and restore rehearsal.
 - [ ] Publish counsel-reviewed privacy, subscription, and safety terms.
 - [ ] Repeat Google OAuth, text/link/screenshot, quota, history isolation, result rendering, and mobile smoke tests in the production deployment.

@@ -10,7 +10,7 @@ See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for the current launch st
 - Text, link, and screenshot analysis through `gpt-5-nano` with web search
 - Strict structured JSON with claim-level findings, verified evidence, source tiers, score rationale, uncertainty, limitations, and next steps
 - Explicit opinion, satire, outdated-context, and unverifiable classifications
-- Five total checks on Free; 1,000 checks per month on Starter at $4.99/month
+- Three lifetime checks on Free; 20/month on Starter at $3.99, 80/month on Pro at $12.99, and 180/month on Max at $24.99
 - Atomic, server-enforced usage reservations with idempotency and failure rollback
 - Private history with category, verdict, date, and text filters
 - Stripe Checkout, signed webhook synchronization, and Customer Portal
@@ -49,7 +49,10 @@ Requirements: Node.js 22.12 or newer, npm, a Supabase project, an OpenAI API key
 | `OPENAI_MODEL` | Server only | Defaults to `gpt-5-nano` |
 | `STRIPE_SECRET_KEY` | Server only | Checkout, portal, and webhook API access |
 | `STRIPE_WEBHOOK_SECRET` | Server only | Verifies Stripe webhook signatures |
-| `STRIPE_STARTER_PRICE_ID` | Server only | Recurring $4.99 Starter price identifier |
+| `STRIPE_STARTER_PRICE_ID` | Server only | Legacy recurring $4.99 Starter price, retained for existing subscribers only |
+| `STRIPE_STARTER_399_PRICE_ID` | Server only | New recurring $3.99 Starter price identifier |
+| `STRIPE_PRO_PRICE_ID` | Server only | Recurring $12.99 Pro price identifier |
+| `STRIPE_MAX_PRICE_ID` | Server only | Recurring $24.99 Max price identifier |
 
 Never expose the service-role, OpenAI, Stripe secret, or webhook secret values to browser code.
 
@@ -69,12 +72,13 @@ The `reserve_fact_check`, `complete_fact_check`, `charge_fact_check_attempt`, an
 
 ## Stripe setup
 
-1. Create a recurring monthly product named **InSight AI Starter** priced at `$4.99 USD`.
-2. Set `STRIPE_STARTER_PRICE_ID` to its `price_...` identifier.
-3. Enable the Customer Portal and subscription cancellation.
-4. Register `https://<app-origin>/api/stripe/webhook` for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`.
-5. Set `STRIPE_WEBHOOK_SECRET` to the endpoint signing secret.
-6. For local testing, run `stripe listen --forward-to localhost:3000/api/stripe/webhook` and use the printed signing secret.
+1. Create recurring monthly prices: **Starter** `$3.99`, **Pro** `$12.99`, and **Max** `$24.99` USD.
+2. Set their identifiers as `STRIPE_STARTER_399_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, and `STRIPE_MAX_PRICE_ID`.
+3. If the former `$4.99` Starter price has subscribers, keep its identifier in `STRIPE_STARTER_PRICE_ID`; otherwise leave it empty.
+4. Enable the Customer Portal for plan switching and cancellation, and add all three active products to its configuration.
+5. Register `https://<app-origin>/api/stripe/webhook` for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+6. Set `STRIPE_WEBHOOK_SECRET` to the endpoint signing secret.
+7. For local testing, run `stripe listen --forward-to localhost:3000/api/stripe/webhook` and use the printed signing secret.
 
 Checkout metadata carries the authenticated Supabase user ID. Only signature-verified events update `profiles.plan`; the browser cannot set subscription state.
 
@@ -82,7 +86,7 @@ Checkout metadata carries the authenticated Supabase user ID. Only signature-ver
 
 The trust pipeline has two model stages. Classification first separates objective claims from opinion, prediction, satire, rhetoric, belief, humor, and unverifiable content, then decomposes compound inputs into independently checkable claims. Non-factual content receives no truth score and does not trigger web search.
 
-Factual claims then require Responses API web search with medium reasoning and search context. The research budget scales from two built-in tool calls for one factual claim to a six-call ceiling for compound checks. It seeks multiple independent sources, prioritizes current primary evidence, compares support and contradiction, and applies stricter standards to high-risk categories. Both stages use strict JSON Schema, are validated with Zod, and retry malformed output once.
+Factual claims then require Responses API web search with medium reasoning and search context. URL classification is capped at two searches and each of up to two research passes is capped at three, limiting a difficult check to eight paid searches. It seeks multiple independent sources, prioritizes current primary evidence, compares support and contradiction, and applies stricter standards to high-risk categories. Both stages use strict JSON Schema, are validated with Zod, and retry malformed output once.
 
 The model does not choose final scores or verdicts. `src/lib/fact-check/trust-engine.ts` intersects every cited URL with actual tool-returned URLs, assigns deterministic source tiers, requires at least two independent directional sources per factual claim, weights Tier 1/2/3 evidence at 3/2/1, calculates truth and confidence scores, caps confidence for high-risk claims without primary evidence, and withholds the overall score when any factual claim remains unresolved. Up to ten verified sources persist with publisher/date/tier metadata and render as clickable evidence.
 
@@ -121,7 +125,7 @@ Manual release checks:
 3. Force a pre-AI link-extraction failure and verify usage remains unchanged; force a post-request OpenAI failure and verify usage increases once.
 4. Submit opinion, prediction, satire, and vague content; verify no truth score is assigned.
 5. Submit compound and high-risk factual claims; inspect claim decomposition, contradictory evidence, source tiers, uncertainty, and score rationale.
-6. Run five Free checks and verify the sixth is blocked in UI and API.
+6. Run three Free checks and verify the fourth is blocked in UI and API. Verify paid limits at 20, 80, and 180 checks.
 7. Complete Checkout and verify the signed webhook promotes the account.
 8. Run concurrent submissions near a limit and verify only remaining capacity succeeds.
 9. Filter history and verify another user's fact-check ID returns not found.
@@ -174,7 +178,10 @@ OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5-nano
 STRIPE_SECRET_KEY=...
 STRIPE_WEBHOOK_SECRET=...
-STRIPE_STARTER_PRICE_ID=...
+STRIPE_STARTER_PRICE_ID=... # optional legacy $4.99 price
+STRIPE_STARTER_399_PRICE_ID=...
+STRIPE_PRO_PRICE_ID=...
+STRIPE_MAX_PRICE_ID=...
 ```
 
 Do not upload `.env.local` as a secret file. Enter each value in Render's encrypted environment-variable UI. The build intentionally fails if required production values are missing or malformed.
@@ -233,8 +240,8 @@ Manual release checks must use Stripe test mode and a non-production Supabase pr
 - Web search depends on public indexing and does not guarantee access to every submitted page.
 - Multi-source checks are intentionally slower and more expensive than single-model responses; move them to durable background jobs if the hosting platform cannot sustain 180-second requests.
 - Screenshot authenticity and provenance are not verified.
-- Only Free and Starter are active, though plan IDs are extensible.
+- Free, Starter, Pro, and Max are supported. Paid checks reset monthly and do not roll over.
 - Storage retention and account deletion workflows are needed before broad launch.
 - Add webhook reconciliation, observability, accessibility and browser E2E tests, abuse controls, and a legally reviewed privacy policy before high-scale launch.
 
-The schema and plan registry can expand to Student, Creator, Educator, Pro, and Team/School tiers.
+The schema and plan registry can expand to Student, Creator, Educator, and Team/School tiers.

@@ -52,7 +52,7 @@ export default function TermsPage() {
           </section>
           <section id="subscriptions">
             <h2>Subscriptions</h2>
-            <p>The Starter plan renews monthly until cancelled through the Stripe billing portal. Limits are enforced server-side. Failures before an AI request starts are not counted. Once AI analysis starts, the attempt counts toward your plan even if a result cannot be completed.</p>
+            <p>Starter, Pro, and Max renew monthly until cancelled through the Stripe billing portal. Included checks do not roll over and there are no automatic usage overages. Limits are enforced server-side. Failures before an AI request starts are not counted. Once AI analysis starts, the attempt counts toward your plan even if a result cannot be completed.</p>
           </section>
           <section>
             <h2>Service availability</h2>

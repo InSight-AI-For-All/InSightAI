@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type {
   ResponseCreateParamsNonStreaming,
   ResponseOutputItem,
+  ResponseUsage,
 } from "openai/resources/responses/responses";
 import type { ZodType } from "zod";
 import { ConfigurationError, getServerEnvironment } from "@/lib/env";
@@ -37,6 +38,39 @@ type BoundedResponseCreateParams = ResponseCreateParamsNonStreaming & {
 };
 
 const analysisBudgetMilliseconds = 165_000;
+const openAiPricing = {
+  uncachedInputPerMillion: 0.05,
+  cachedInputPerMillion: 0.005,
+  outputPerMillion: 0.40,
+  webSearch: 0.01,
+} as const;
+
+type UsageTotals = {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+};
+
+function emptyUsage(): UsageTotals {
+  return { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
+}
+
+function addUsage(total: UsageTotals, usage: ResponseUsage | undefined) {
+  if (!usage) return;
+  total.inputTokens += usage.input_tokens;
+  total.cachedInputTokens += usage.input_tokens_details.cached_tokens;
+  total.outputTokens += usage.output_tokens;
+}
+
+function estimatedOpenAiCost(usage: UsageTotals, searchCalls: number) {
+  const uncachedInput = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
+  return (
+    uncachedInput * openAiPricing.uncachedInputPerMillion / 1_000_000 +
+    usage.cachedInputTokens * openAiPricing.cachedInputPerMillion / 1_000_000 +
+    usage.outputTokens * openAiPricing.outputPerMillion / 1_000_000 +
+    searchCalls * openAiPricing.webSearch
+  );
+}
 
 export class FactCheckAnalysisError extends Error {
   constructor(
@@ -142,6 +176,7 @@ function logCompletion(
   classificationAttempts: number,
   researchAttempts: number,
   searchCalls: number,
+  usage: UsageTotals,
   result: FactCheckResult,
 ) {
   logServerInfo("fact_check.analysis_completed", {
@@ -152,6 +187,10 @@ function logCompletion(
     classificationAttempts,
     researchAttempts,
     searchCalls,
+    inputTokens: usage.inputTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    outputTokens: usage.outputTokens,
+    estimatedCostUsd: Number(estimatedOpenAiCost(usage, searchCalls).toFixed(6)),
     factCheckable: result.factCheckable,
     claimCount: result.claims.length,
     sourceCount: result.methodology.sourceCount,
@@ -172,6 +211,7 @@ async function classifyInput(
 ) {
   const linkSubmission = input.inputType === "link";
   let totalSearchCalls = 0;
+  const usage = emptyUsage();
   const retrievedSources = new Map<string, RetrievedSource>();
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -193,13 +233,14 @@ async function classifyInput(
       ...(linkSubmission ? {
         tools: [{ type: "web_search" as const, search_context_size: "medium" as const }],
         tool_choice: "required" as const,
-        max_tool_calls: 3,
+        max_tool_calls: 2,
         include: ["web_search_call.action.sources" as const],
       } : {}),
     };
     const options = requestOptions(deadline, linkSubmission ? 45_000 : 30_000);
     onAiRequest();
     const response = await openai.responses.create(request, options);
+    addUsage(usage, response.usage);
     totalSearchCalls += searchCallCount(response.output);
     for (const source of extractRetrievedSources(response.output)) retrievedSources.set(source.url, source);
     const classification = parseStructured(response.output_text, factCheckClassificationSchema);
@@ -211,6 +252,7 @@ async function classifyInput(
         } satisfies FactCheckClassification,
         attempts: attempt,
         searchCalls: totalSearchCalls,
+        usage,
         retrievedSources: Array.from(retrievedSources.values()),
       };
     }
@@ -233,9 +275,10 @@ async function researchClaims(
     JSON.stringify(classification.claims),
   ].join("\n");
   const factualClaimCount = classification.claims.filter((claim) => claim.factCheckable).length;
-  const maximumSearchCalls = Math.min(6, Math.max(2, factualClaimCount * 2));
+  const maximumSearchCalls = Math.min(3, Math.max(2, factualClaimCount));
   let retryGuidance = "";
   let totalSearchCalls = 0;
+  const usage = emptyUsage();
   let insufficientFallback: { research: FactCheckResearch; retrievedSources: RetrievedSource[] } | null = null;
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -263,6 +306,7 @@ async function researchClaims(
     const options = requestOptions(deadline, 120_000);
     onAiRequest();
     const response = await openai.responses.create(request, options);
+    addUsage(usage, response.usage);
     totalSearchCalls += searchCallCount(response.output);
     const research = parseStructured(response.output_text, factCheckResearchSchema);
     if (!research) continue;
@@ -284,6 +328,7 @@ async function researchClaims(
       } satisfies FactCheckResearch,
       retrievedSources,
       searchCalls: totalSearchCalls,
+      usage,
       attempts: attempt,
     };
   }
@@ -291,6 +336,7 @@ async function researchClaims(
     return {
       ...insufficientFallback,
       searchCalls: totalSearchCalls,
+      usage,
       attempts: 2,
     };
   }
@@ -338,7 +384,7 @@ export async function analyzeFactCheck(input: AnalysisInput) {
         performed: preparedInput.inputType === "link",
         retrievedSources: classificationStage.retrievedSources,
       });
-      logCompletion(environment, input, startedAt, classificationStage.attempts, 0, classificationStage.searchCalls, result);
+      logCompletion(environment, input, startedAt, classificationStage.attempts, 0, classificationStage.searchCalls, classificationStage.usage, result);
       return result;
     }
 
@@ -365,6 +411,11 @@ export async function analyzeFactCheck(input: AnalysisInput) {
       classificationStage.attempts,
       researchStage.attempts,
       classificationStage.searchCalls + researchStage.searchCalls,
+      {
+        inputTokens: classificationStage.usage.inputTokens + researchStage.usage.inputTokens,
+        cachedInputTokens: classificationStage.usage.cachedInputTokens + researchStage.usage.cachedInputTokens,
+        outputTokens: classificationStage.usage.outputTokens + researchStage.usage.outputTokens,
+      },
       validated.data,
     );
     return validated.data;

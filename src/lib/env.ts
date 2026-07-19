@@ -34,6 +34,9 @@ export function getServerEnvironment() {
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || "",
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || "",
     STRIPE_STARTER_PRICE_ID: process.env.STRIPE_STARTER_PRICE_ID || "",
+    STRIPE_STARTER_399_PRICE_ID: process.env.STRIPE_STARTER_399_PRICE_ID || "",
+    STRIPE_PRO_PRICE_ID: process.env.STRIPE_PRO_PRICE_ID || "",
+    STRIPE_MAX_PRICE_ID: process.env.STRIPE_MAX_PRICE_ID || "",
   };
 }
 

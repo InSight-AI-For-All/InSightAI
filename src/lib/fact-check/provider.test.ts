@@ -62,7 +62,7 @@ describe("fact-check provider URL classification", () => {
     const request = createResponse.mock.calls[0][0];
     expect(request.tools).toEqual([{ type: "web_search", search_context_size: "medium" }]);
     expect(request.tool_choice).toBe("required");
-    expect(request.max_tool_calls).toBe(3);
+    expect(request.max_tool_calls).toBe(2);
     expect(request.instructions).toContain("Search the exact submitted URL first");
     expect(request.input[0].content[0].text).toContain("https://www.instagram.com/p/example/");
     expect(request.input[0].content[0].text).toContain("free public concert");

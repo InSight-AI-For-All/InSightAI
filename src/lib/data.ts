@@ -138,7 +138,7 @@ export async function getDashboardOverview(userId: string) {
 
   const plan = getPlan(profileResponse.data.plan);
   const monthlyUsageExpired = new Date(usageResponse.data.reset_at).getTime() <= Date.now();
-  const used = plan.id === "starter" && !monthlyUsageExpired
+  const used = plan.id !== "free" && !monthlyUsageExpired
     ? usageResponse.data.monthly_used
     : plan.id === "free"
       ? usageResponse.data.free_used

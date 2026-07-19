@@ -4,6 +4,10 @@ InSight AI is a mobile-first, evidence-assisted fact-checking SaaS foundation. S
 
 See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for the current launch status, verified checks, blockers, and release gate.
 
+## Private company documentation
+
+The internal company operating system lives locally in `.company/` and is intentionally excluded from Git. It contains confidential strategy, market, financial, legal-risk, operating, and institutional-memory documents. Team members must obtain it through the approved private company vault; never force-add, publish, paste into issues, or include it in support bundles. Start with `.company/README.md` after authorized access is provisioned.
+
 ## Product scope
 
 - Google OAuth through Supabase Auth

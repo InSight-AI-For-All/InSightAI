@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
 import { BillingButton } from "@/components/billing-button";
+import { LogoMark } from "@/components/brand";
 import { PricingValue } from "@/components/pricing-value";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -39,6 +40,7 @@ export default async function PricingPage({
       <main className="pricing-page">
         <div className="container">
           <header className="pricing-heading">
+            <LogoMark size={92} className="pricing-brand-mark" />
             <p className="eyebrow">Plans that respect the math</p>
             <h1>Choose how often you need a second look.</h1>
             <p>Every tier uses the same evidence standards. You pay only for more checks, not better answers.</p>

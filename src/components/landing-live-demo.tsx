@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Heart, MessageCircle, ScanSearch, Send } from "lucide-react";
+import { Check, Heart, MessageCircle, Send } from "lucide-react";
+import { LogoMark } from "@/components/brand";
 import styles from "@/app/page.module.css";
 
 const steps = ["Post detected", "Claims separated", "Context checked", "Score ready"];
@@ -23,7 +24,7 @@ export function LandingLiveDemo() {
         <div className={styles.postActions}><span><Heart size={18} /> 28.4K</span><span><MessageCircle size={18} /> 1,903</span><span><Send size={18} /></span></div>
       </div>
       <div className={styles.scanBridge}>
-        <span><ScanSearch size={21} /></span>
+        <span><LogoMark size={36} /></span>
         <div>{steps.map((label, index) => <i className={index <= step ? styles.scanActive : ""} key={label}>{index < step ? <Check size={11} /> : null}{label}</i>)}</div>
       </div>
       <div className={`${styles.liveResult} ${step === 3 ? styles.liveResultReady : ""}`}>

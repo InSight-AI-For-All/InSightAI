@@ -9,7 +9,7 @@ export async function SiteHeader() {
   return (
     <header className="site-header">
       <div className="container site-header-inner">
-        <Brand />
+        <Brand priority />
         <nav className="site-nav" aria-label="Main navigation">
           <Link href="/#how-it-works">How it works</Link>
           <Link className="nav-pricing" href="/pricing">Pricing</Link>

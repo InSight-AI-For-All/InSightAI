@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Check, FileText, Image as ImageIcon, Link2, ScanSearch, Sparkles, Upload, Zap } from "lucide-react";
+import { LogoMark } from "@/components/brand";
 import { readFactCheckApiResponse } from "@/lib/api-response";
 import type { InputType } from "@/lib/fact-check/schema";
 import styles from "./fact-check-form.module.css";
@@ -108,7 +109,7 @@ export function FactCheckForm({ initialMode = "text", configured = true }: { ini
   }
 
   if (loading && !limitReached) {
-    return <div className={`panel ${styles.loading}`} aria-live="polite"><div className={styles.loadingVisual}><span className={styles.loadingOrbit}><ScanSearch size={34} /></span><span className={styles.loadingPulse} /></div><p className="eyebrow">Analysis in progress</p><h2>{analysisSteps[loadingStep]}</h2><p>InSight is searching and comparing sources. Thorough checks can take up to two minutes.</p><div className={styles.loadingSteps}>{analysisSteps.map((step, index) => <span className={index <= loadingStep ? styles.loadingStepActive : ""} key={step}>{index < loadingStep ? <Check size={13} /> : <span>{index + 1}</span>}{step}</span>)}</div><div className={styles.loadingBar}><span style={{ width: `${((loadingStep + 1) / analysisSteps.length) * 100}%` }} /></div></div>;
+    return <div className={`panel ${styles.loading}`} aria-live="polite"><div className={styles.loadingVisual}><span className={styles.loadingOrbit}><LogoMark size={68} /></span><span className={styles.loadingPulse} /></div><p className="eyebrow">Analysis in progress</p><h2>{analysisSteps[loadingStep]}</h2><p>InSight is searching and comparing sources. Thorough checks can take up to two minutes.</p><div className={styles.loadingSteps}>{analysisSteps.map((step, index) => <span className={index <= loadingStep ? styles.loadingStepActive : ""} key={step}>{index < loadingStep ? <Check size={13} /> : <span>{index + 1}</span>}{step}</span>)}</div><div className={styles.loadingBar}><span style={{ width: `${((loadingStep + 1) / analysisSteps.length) * 100}%` }} /></div></div>;
   }
 
   if (limitReached) {

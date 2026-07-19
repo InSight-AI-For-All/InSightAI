@@ -2,7 +2,7 @@
   display: grid;
   gap: 26px;
   padding: 26px 20px;
-  background: linear-gradient(145deg, rgba(140, 124, 255, 0.12), transparent 55%);
+  background: linear-gradient(145deg, rgba(12, 166, 167, 0.13), transparent 55%);
 }
 
 .heroCopy {
@@ -89,7 +89,7 @@
 }
 
 .confidence > span {
-  color: var(--cyan);
+  color: var(--confidence-cyan);
   font-variant-numeric: tabular-nums;
 }
 
@@ -106,8 +106,8 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--violet), var(--cyan));
-  box-shadow: 0 0 18px rgba(73, 216, 255, 0.28);
+  background: linear-gradient(90deg, var(--info-blue), var(--confidence-cyan));
+  box-shadow: 0 0 18px rgba(86, 204, 215, 0.3);
   transform-origin: left;
   animation: confidence-grow 1.1s 300ms cubic-bezier(.2,.8,.2,1) both;
 }
@@ -130,8 +130,8 @@
   height: 38px;
   place-items: center;
   border-radius: 12px;
-  background: rgba(140, 124, 255, 0.12);
-  color: #b8afff;
+  background: rgba(12, 166, 167, 0.12);
+  color: #8edfe2;
 }
 
 .source small {
@@ -172,7 +172,7 @@
 }
 
 .methodology svg {
-  color: var(--cyan);
+  color: var(--confidence-cyan);
 }
 
 .methodology span {
@@ -214,7 +214,7 @@
 }
 
 .section h2 svg {
-  color: var(--lime);
+  color: var(--brand-accent);
 }
 
 .section p {
@@ -247,10 +247,10 @@
   width: 24px;
   height: 24px;
   place-items: center;
-  border: 1px solid rgba(140, 124, 255, 0.24);
+  border: 1px solid rgba(86, 204, 215, 0.26);
   border-radius: 8px;
-  background: rgba(140, 124, 255, 0.1);
-  color: #b8afff;
+  background: rgba(12, 166, 167, 0.11);
+  color: #8edfe2;
   font-size: 0.68rem;
   font-weight: 800;
 }
@@ -294,7 +294,7 @@
 
 .claimItem header strong {
   margin-left: auto;
-  color: var(--cyan);
+  color: var(--confidence-cyan);
   font-size: 0.76rem;
   font-variant-numeric: tabular-nums;
 }
@@ -326,10 +326,10 @@
   color: var(--text);
 }
 
-.evidenceList a[data-stance="supports"] { border-color: var(--green); }
+.evidenceList a[data-stance="supports"] { border-color: var(--success-green); }
 .evidenceList a[data-stance="contradicts"] { border-color: var(--red); }
-.evidenceList a[data-stance="context"] { border-color: var(--cyan); }
-.evidenceList a[data-stance="unclear"] { border-color: var(--amber); }
+.evidenceList a[data-stance="context"] { border-color: var(--confidence-cyan); }
+.evidenceList a[data-stance="unclear"] { border-color: var(--caution-amber); }
 
 .evidenceList a > span:nth-child(2) {
   display: grid;
@@ -367,15 +367,15 @@
 
 .noEvidence {
   margin-top: 13px !important;
-  border-left: 3px solid var(--amber);
+  border-left: 3px solid var(--caution-amber);
   padding-left: 11px;
   color: var(--muted) !important;
 }
 
 .action {
   grid-column: 1 / -1;
-  border-color: rgba(198, 255, 74, 0.22);
-  background: linear-gradient(145deg, rgba(198, 255, 74, 0.1), rgba(20, 22, 40, 0.82));
+  border-color: rgba(17, 184, 181, 0.26);
+  background: linear-gradient(145deg, rgba(12, 166, 167, 0.12), rgba(5, 18, 43, 0.88));
 }
 
 .sources {
@@ -400,8 +400,8 @@
 }
 
 .sourceList a:hover {
-  border-color: rgba(73, 216, 255, 0.34);
-  background: rgba(73, 216, 255, 0.06);
+  border-color: rgba(86, 204, 215, 0.36);
+  background: rgba(86, 204, 215, 0.07);
 }
 
 .sourceList a > span {
@@ -440,12 +440,12 @@
 }
 
 .sourceList em[data-tier="2"] {
-  border-color: rgba(73, 216, 255, 0.32);
-  color: var(--cyan);
+  border-color: rgba(86, 204, 215, 0.34);
+  color: var(--confidence-cyan);
 }
 
 .sourceList svg {
-  color: var(--cyan);
+  color: var(--confidence-cyan);
 }
 
 .disclaimer {
@@ -463,7 +463,7 @@
 
 .disclaimer svg {
   flex: 0 0 auto;
-  color: var(--amber);
+  color: var(--caution-amber);
 }
 
 @keyframes score-arrive { from { opacity: 0; transform: rotate(-60deg) scale(.7); } to { opacity: 1; transform: none; } }

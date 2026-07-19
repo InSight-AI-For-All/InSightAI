@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRight,
   Check,
@@ -13,6 +14,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
+import { LogoMark } from "@/components/brand";
 import { LandingLiveDemo } from "@/components/landing-live-demo";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -29,6 +31,7 @@ export default function HomePage() {
           <div className={styles.heroMesh} aria-hidden="true" />
           <div className={`container ${styles.heroInner}`}>
             <div className={styles.heroCopy}>
+              <Image className={styles.heroBrand} src="/brand/insight-ai-horizontal-on-dark.png" width={1600} height={420} alt="InSight AI" priority unoptimized />
               <p className="eyebrow">Truth checks at feed speed</p>
               <h1>Know what&apos;s real before it goes viral.</h1>
               <p className={styles.heroLead}>Drop any post, screenshot, link, or claim. InSight separates fact from noise and gives you a truth score in seconds.</p>
@@ -61,7 +64,7 @@ export default function HomePage() {
             <div className={styles.sectionIntro}><p className="eyebrow">Three inputs. One instinct.</p><h2>Before you repost it, InSight it.</h2></div>
             <div className={styles.workflow}>
               <div className={styles.inputStack}><span><MessageSquareQuote size={20} /> Paste the claim</span><span><Link2 size={20} /> Drop the link</span><span><ImageIcon size={20} /> Paste the screenshot</span></div>
-              <div className={styles.workflowCore}><span><ScanSearch size={30} /></span><strong>InSight AI</strong><small>claims · context · confidence</small></div>
+              <div className={styles.workflowCore}><span><LogoMark size={62} /></span><strong>InSight AI</strong><small>claims · context · confidence</small></div>
               <div className={styles.workflowOutput}><strong>62</strong><div><span>Mixed</span><small>74% confidence</small></div></div>
             </div>
           </div>
@@ -94,7 +97,7 @@ export default function HomePage() {
           <div className={`container ${styles.faqGrid}`}><div className={styles.sectionIntro}><p className="eyebrow">Questions are the point</p><h2>Good things to ask.</h2></div><div className={styles.faqList}><details><summary>Does InSight decide absolute truth?</summary><p>No. It gives evidence-assisted analysis with confidence and limitations, not a declaration of final truth.</p></details><details><summary>Does InSight open every link?</summary><p>InSight searches the web and may open relevant pages, but paywalls, login requirements, robots rules, or indexing gaps can prevent access. Those limits are called out in the result.</p></details><details><summary>Can it detect opinion, memes, or satire?</summary><p>Yes. Non-factual content is classified directly instead of being forced into a misleading true-or-false result.</p></details><details><summary>Are screenshots private?</summary><p>Screenshots are processed for analysis without being persisted by the application. Share cards do not publish private result URLs.</p></details></div></div>
         </section>
 
-        <section className={styles.finalCta}><div className="container"><span><ScanSearch size={28} /></span><h2>The next viral post is already loading.</h2><p>Know before you share.</p><Link className="button" href="/login">Get your 3 free checks <ArrowRight size={18} /></Link></div></section>
+        <section className={styles.finalCta}><div className="container"><span><LogoMark size={56} /></span><h2>The next viral post is already loading.</h2><p>Know before you share.</p><Link className="button" href="/login">Get your 3 free checks <ArrowRight size={18} /></Link></div></section>
       </main>
       <SiteFooter />
     </>

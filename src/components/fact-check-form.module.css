@@ -1,6 +1,6 @@
 .shell {
   overflow: hidden;
-  border-color: rgba(140, 124, 255, 0.22);
+  border-color: rgba(12, 166, 167, 0.24);
   animation: arrive 480ms ease both;
 }
 
@@ -38,14 +38,14 @@
 }
 
 .tabActive {
-  background: linear-gradient(145deg, rgba(140, 124, 255, 0.22), rgba(255, 255, 255, 0.07));
+  background: linear-gradient(145deg, rgba(12, 166, 167, 0.2), rgba(255, 255, 255, 0.07));
   color: var(--ink);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .tabActive svg {
-  color: var(--lime);
-  filter: drop-shadow(0 0 8px rgba(198, 255, 74, 0.3));
+  color: var(--brand-accent);
+  filter: drop-shadow(0 0 8px rgba(17, 184, 181, 0.34));
 }
 
 .body {
@@ -79,9 +79,9 @@
   min-height: 270px;
   place-items: center;
   overflow: hidden;
-  border: 1.5px dashed rgba(140, 124, 255, 0.5);
+  border: 1.5px dashed rgba(86, 204, 215, 0.52);
   border-radius: 18px;
-  background: linear-gradient(145deg, rgba(140, 124, 255, 0.09), rgba(73, 216, 255, 0.035));
+  background: linear-gradient(145deg, rgba(12, 166, 167, 0.1), rgba(86, 204, 215, 0.045));
   text-align: center;
   transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
 }
@@ -89,8 +89,8 @@
 .dropzone:hover,
 .dropzone:focus,
 .dropzoneDragging {
-  border-color: var(--lime);
-  background: rgba(198, 255, 74, 0.07);
+  border-color: var(--brand-accent);
+  background: rgba(12, 166, 167, 0.09);
   outline: 0;
   transform: translateY(-2px);
 }
@@ -133,11 +133,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(198, 255, 74, 0.32);
+  border: 1px solid rgba(17, 184, 181, 0.36);
   border-radius: 999px;
   padding: 8px 11px;
   background: rgba(8, 9, 18, 0.86);
-  color: var(--lime);
+  color: var(--brand-accent);
   font-size: 0.7rem;
   font-weight: 800;
   backdrop-filter: blur(12px);
@@ -171,11 +171,11 @@
   height: 58px;
   margin-bottom: 4px;
   place-items: center;
-  border: 1px solid rgba(198, 255, 74, 0.28);
+  border: 1px solid rgba(17, 184, 181, 0.32);
   border-radius: 18px;
-  background: linear-gradient(145deg, rgba(198, 255, 74, 0.16), rgba(140, 124, 255, 0.16));
-  color: var(--lime);
-  box-shadow: 0 12px 36px rgba(101, 87, 255, 0.18);
+  background: linear-gradient(145deg, rgba(12, 166, 167, 0.18), rgba(28, 109, 176, 0.16));
+  color: var(--brand-accent);
+  box-shadow: 0 12px 36px rgba(28, 109, 176, 0.2);
 }
 
 .formFooter {
@@ -197,7 +197,7 @@
 .formFooter p svg {
   flex: 0 0 auto;
   margin-top: 2px;
-  color: var(--violet);
+  color: var(--info-blue);
 }
 
 .formFooter .button {
@@ -229,18 +229,16 @@
   width: 78px;
   height: 78px;
   place-items: center;
-  border: 1px solid rgba(198, 255, 74, 0.35);
   border-radius: 26px;
-  background: rgba(198, 255, 74, 0.08);
-  color: var(--lime);
-  box-shadow: 0 0 42px rgba(198, 255, 74, 0.14);
+  color: var(--brand-accent);
+  filter: drop-shadow(0 0 24px rgba(12, 166, 167, 0.24));
   animation: float 2.4s ease-in-out infinite;
 }
 
 .loadingPulse {
   position: absolute;
   inset: 4px;
-  border: 1px solid rgba(140, 124, 255, 0.42);
+  border: 1px solid rgba(86, 204, 215, 0.44);
   border-radius: 36px;
   animation: pulse 1.8s ease-out infinite;
 }
@@ -296,8 +294,8 @@
 
 .loadingSteps .loadingStepActive > span,
 .loadingSteps .loadingStepActive > svg {
-  border-color: rgba(198, 255, 74, 0.28);
-  color: var(--lime);
+  border-color: rgba(17, 184, 181, 0.32);
+  color: var(--brand-accent);
 }
 
 .loadingBar {
@@ -312,8 +310,8 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--violet), var(--cyan), var(--lime));
-  box-shadow: 0 0 18px rgba(73, 216, 255, 0.32);
+  background: linear-gradient(90deg, var(--info-blue), var(--confidence-cyan), var(--brand-accent));
+  box-shadow: 0 0 18px rgba(86, 204, 215, 0.34);
   transition: width 600ms cubic-bezier(.2,.8,.2,1);
 }
 
@@ -338,11 +336,11 @@
   height: 72px;
   margin-bottom: 22px;
   place-items: center;
-  border: 1px solid rgba(198, 255, 74, 0.32);
+  border: 1px solid rgba(17, 184, 181, 0.36);
   border-radius: 24px;
-  background: rgba(198, 255, 74, 0.1);
-  color: var(--lime);
-  box-shadow: 0 0 60px rgba(198, 255, 74, 0.18);
+  background: rgba(12, 166, 167, 0.12);
+  color: var(--brand-accent);
+  box-shadow: 0 0 60px rgba(12, 166, 167, 0.22);
 }
 
 .paywall h2 {

@@ -20,9 +20,9 @@ import type { FactCheckRecord } from "@/lib/data";
 import styles from "./result-view.module.css";
 
 function scoreColor(score: number) {
-  if (score >= 75) return "#23845f";
-  if (score >= 45) return "#e2ad2e";
-  return "#d55d4b";
+  if (score >= 75) return "#43c69c";
+  if (score >= 45) return "#f3c969";
+  return "#f07c72";
 }
 
 function EvidenceIcon({ stance }: { stance: "supports" | "contradicts" | "context" | "unclear" }) {

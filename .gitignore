@@ -15,6 +15,9 @@
 .env*
 !.env.example
 
+# Internal company operating system. Confidential; distribute only through the approved private vault.
+/.company/
+
 # Supabase CLI local project link
 /supabase/.temp/
 

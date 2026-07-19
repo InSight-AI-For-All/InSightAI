@@ -7,6 +7,7 @@ import Image from "next/image";
 import { ArrowRight, Check, FileText, Image as ImageIcon, Link2, ScanSearch, Sparkles, Upload, Zap } from "lucide-react";
 import { LogoMark } from "@/components/brand";
 import { readFactCheckApiResponse } from "@/lib/api-response";
+import { getTelemetrySessionId } from "@/lib/telemetry/client";
 import type { InputType } from "@/lib/fact-check/schema";
 import styles from "./fact-check-form.module.css";
 
@@ -90,6 +91,8 @@ export function FactCheckForm({ initialMode = "text", configured = true }: { ini
     formData.set("text", text);
     formData.set("url", url);
     formData.set("idempotencyKey", crypto.randomUUID());
+    const telemetrySessionId = getTelemetrySessionId();
+    if (telemetrySessionId) formData.set("telemetrySessionId", telemetrySessionId);
     if (image) formData.set("image", image);
 
     try {

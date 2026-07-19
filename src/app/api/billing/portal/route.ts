@@ -4,8 +4,10 @@ import { getRequestId, isSameOriginRequest } from "@/lib/request-security";
 import { getErrorName, logServerError } from "@/lib/server-log";
 import { createStripeClient } from "@/lib/stripe";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { recordApiRequest, recordBillingEvent, recordError } from "@/lib/telemetry/server";
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   const requestId = getRequestId(request);
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: "This request origin is not allowed.", code: "INVALID_ORIGIN", requestId }, { status: 403, headers: { "X-Request-ID": requestId } });
@@ -23,9 +25,13 @@ export async function POST(request: NextRequest) {
   try {
     const stripe = createStripeClient();
     const session = await stripe.billingPortal.sessions.create({ customer: subscription.stripe_customer_id, return_url: `${getAppUrl()}/account` });
+    await recordBillingEvent({ eventName: "billing_portal_opened", providerEventId: session.id, userId: user.id, requestId });
+    await recordApiRequest({ endpoint: "/api/billing/portal", method: "POST", statusCode: 303, latencyMs: Date.now() - startedAt, userId: user.id, requestId });
     return NextResponse.redirect(session.url, { status: 303 });
   } catch (error) {
     logServerError("stripe.portal_failed", { requestId, errorName: getErrorName(error) });
+    await recordError({ error, type: "payment_error", severity: "error", endpoint: "/api/billing/portal", userId: user.id, requestId });
+    await recordApiRequest({ endpoint: "/api/billing/portal", method: "POST", statusCode: 503, latencyMs: Date.now() - startedAt, userId: user.id, requestId, errorType: "payment_error", errorCode: "PORTAL_FAILED" });
     return NextResponse.redirect(new URL("/account?billing=unavailable", request.url), { status: 303 });
   }
 }

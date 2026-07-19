@@ -10,11 +10,19 @@ export function getRequestId(request: Request) {
 
 export function isSameOriginRequest(request: Request) {
   const origin = request.headers.get("origin");
-  if (!origin) return false;
   try {
-    const requestOrigin = new URL(request.url).origin;
+    const requestUrl = new URL(request.url);
+    const requestOrigin = requestUrl.origin;
     const allowedOrigins = new Set([requestOrigin, getAppUrl()]);
-    return allowedOrigins.has(new URL(origin).origin);
+    const externalHost = request.headers.get("x-forwarded-host") || request.headers.get("host");
+    if (externalHost) {
+      const externalProtocol = request.headers.get("x-forwarded-proto") || requestUrl.protocol.slice(0, -1);
+      allowedOrigins.add(new URL(`${externalProtocol}://${externalHost}`).origin);
+    }
+    if (origin) return allowedOrigins.has(new URL(origin).origin);
+    const referrer = request.headers.get("referer");
+    if (referrer) return allowedOrigins.has(new URL(referrer).origin);
+    return request.headers.get("sec-fetch-site") === "same-origin";
   } catch {
     return false;
   }

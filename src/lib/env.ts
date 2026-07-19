@@ -29,6 +29,9 @@ export function getPublicSupabaseEnvironment() {
 export function getServerEnvironment() {
   return {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    ADMIN_CRON_SECRET: process.env.ADMIN_CRON_SECRET || "",
+    ALERT_WEBHOOK_URL: process.env.ALERT_WEBHOOK_URL || "",
+    ALERT_WEBHOOK_SECRET: process.env.ALERT_WEBHOOK_SECRET || "",
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
     OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-5-nano",
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || "",

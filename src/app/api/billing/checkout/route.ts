@@ -6,8 +6,10 @@ import { getRequestId, isSameOriginRequest } from "@/lib/request-security";
 import { getErrorName, logServerError } from "@/lib/server-log";
 import { createStripeClient } from "@/lib/stripe";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { recordApiRequest, recordBillingEvent, recordError, recordTelemetryEvent } from "@/lib/telemetry/server";
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   const requestId = getRequestId(request);
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: "This request origin is not allowed.", code: "INVALID_ORIGIN", requestId }, { status: 403, headers: { "X-Request-ID": requestId } });
@@ -22,6 +24,8 @@ export async function POST(request: NextRequest) {
     const environment = getServerEnvironment();
     const formData = await request.formData();
     const plan = z.enum(paidPlanIds).parse(formData.get("plan") || "starter");
+    await recordTelemetryEvent({ eventName: "checkout_started", category: "billing", userId: user.id, requestId, metadata: { plan } });
+    await recordBillingEvent({ eventName: "checkout_started", userId: user.id, requestId, plan });
     const priceIds: Record<PaidPlanId, string> = {
       starter: environment.STRIPE_STARTER_399_PRICE_ID,
       pro: environment.STRIPE_PRO_PRICE_ID,
@@ -58,9 +62,14 @@ export async function POST(request: NextRequest) {
     });
 
     if (!session.url) throw new Error("Stripe did not return a checkout URL.");
+    await recordBillingEvent({ eventName: "checkout_session_created", providerEventId: session.id, userId: user.id, requestId, plan, metadata: { mode: session.mode || "subscription" } });
+    await recordApiRequest({ endpoint: "/api/billing/checkout", method: "POST", statusCode: 303, latencyMs: Date.now() - startedAt, userId: user.id, requestId, metadata: { plan } });
     return NextResponse.redirect(session.url, { status: 303 });
   } catch (error) {
     logServerError("stripe.checkout_failed", { requestId, errorName: getErrorName(error) });
+    await recordBillingEvent({ eventName: "checkout_failed", userId: user.id, requestId, success: false, errorCode: getErrorName(error) });
+    await recordError({ error, type: "payment_error", severity: "error", endpoint: "/api/billing/checkout", userId: user.id, requestId });
+    await recordApiRequest({ endpoint: "/api/billing/checkout", method: "POST", statusCode: 503, latencyMs: Date.now() - startedAt, userId: user.id, requestId, errorType: "payment_error", errorCode: "CHECKOUT_FAILED" });
     return NextResponse.redirect(new URL("/pricing?billing=unavailable", request.url), { status: 303 });
   }
 }

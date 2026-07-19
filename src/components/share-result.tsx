@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Download, Share2 } from "lucide-react";
+import { trackEvent } from "@/lib/telemetry/client";
 
 type ShareResultProps = {
   verdict: string;
@@ -120,6 +121,7 @@ export function ShareResult(props: ShareResultProps) {
         link.click();
         URL.revokeObjectURL(link.href);
       }
+      trackEvent("result_shared", { verdict: props.verdict, category: props.category });
       setState("done");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") setState("idle");

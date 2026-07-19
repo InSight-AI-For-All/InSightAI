@@ -31,8 +31,14 @@ import {
   type RetrievedSource,
 } from "@/lib/fact-check/trust-engine";
 import { logServerInfo } from "@/lib/server-log";
+import { recordAiUsage, recordError, recordWebSearch } from "@/lib/telemetry/server";
 
 type AnalysisInput = FactCheckSubmission & { imageDataUrl?: string; linkedPageContent?: string };
+type AnalysisTelemetryContext = {
+  userId?: string;
+  requestId?: string;
+  factCheckLogId?: string | null;
+};
 type BoundedResponseCreateParams = ResponseCreateParamsNonStreaming & {
   max_tool_calls?: number | null;
 };
@@ -169,7 +175,7 @@ function searchCallCount(output: ResponseOutputItem[]) {
   return output.filter((item) => item.type === "web_search_call").length;
 }
 
-function logCompletion(
+async function logCompletion(
   environment: ReturnType<typeof getServerEnvironment>,
   input: AnalysisInput,
   startedAt: number,
@@ -178,19 +184,22 @@ function logCompletion(
   searchCalls: number,
   usage: UsageTotals,
   result: FactCheckResult,
+  context?: AnalysisTelemetryContext,
 ) {
+  const durationMs = Date.now() - startedAt;
+  const estimatedCostUsd = Number(estimatedOpenAiCost(usage, searchCalls).toFixed(6));
   logServerInfo("fact_check.analysis_completed", {
     provider: "openai",
     model: environment.OPENAI_MODEL,
     inputType: input.inputType,
-    durationMs: Date.now() - startedAt,
+    durationMs,
     classificationAttempts,
     researchAttempts,
     searchCalls,
     inputTokens: usage.inputTokens,
     cachedInputTokens: usage.cachedInputTokens,
     outputTokens: usage.outputTokens,
-    estimatedCostUsd: Number(estimatedOpenAiCost(usage, searchCalls).toFixed(6)),
+    estimatedCostUsd,
     factCheckable: result.factCheckable,
     claimCount: result.claims.length,
     sourceCount: result.methodology.sourceCount,
@@ -200,6 +209,42 @@ function logCompletion(
     truthScore: result.truthScore,
     confidenceScore: result.confidenceScore,
   });
+  const aiUsageLogId = await recordAiUsage({
+    factCheckLogId: context?.factCheckLogId,
+    userId: context?.userId,
+    requestId: context?.requestId,
+    model: environment.OPENAI_MODEL,
+    requestType: "fact_check",
+    stage: result.factCheckable ? "classification_and_research" : "classification",
+    status: "completed",
+    latencyMs: durationMs,
+    promptTokens: usage.inputTokens,
+    cachedPromptTokens: usage.cachedInputTokens,
+    completionTokens: usage.outputTokens,
+    estimatedCostUsd,
+    retryCount: Math.max(0, classificationAttempts + researchAttempts - (researchAttempts > 0 ? 2 : 1)),
+    metadata: {
+      inputType: input.inputType,
+      factCheckable: result.factCheckable,
+      claimCount: result.claims.length,
+      sourceCount: result.methodology.sourceCount,
+      evidenceQuality: result.methodology.evidenceQuality,
+    },
+  });
+  if (searchCalls > 0) {
+    await recordWebSearch({
+      aiUsageLogId,
+      factCheckLogId: context?.factCheckLogId,
+      userId: context?.userId,
+      requestId: context?.requestId,
+      status: "completed",
+      queryCount: searchCalls,
+      sourceCount: result.methodology.sourceCount,
+      citationCount: result.sources.length,
+      latencyMs: durationMs,
+      metadata: { independentSourceCount: result.methodology.independentSourceCount },
+    });
+  }
 }
 
 async function classifyInput(
@@ -343,7 +388,7 @@ async function researchClaims(
   throw new Error("The research stage returned an invalid structured response.");
 }
 
-export async function analyzeFactCheck(input: AnalysisInput) {
+export async function analyzeFactCheck(input: AnalysisInput, telemetryContext?: AnalysisTelemetryContext) {
   const startedAt = Date.now();
   const deadline = startedAt + analysisBudgetMilliseconds;
   const environment = getServerEnvironment();
@@ -384,7 +429,7 @@ export async function analyzeFactCheck(input: AnalysisInput) {
         performed: preparedInput.inputType === "link",
         retrievedSources: classificationStage.retrievedSources,
       });
-      logCompletion(environment, input, startedAt, classificationStage.attempts, 0, classificationStage.searchCalls, classificationStage.usage, result);
+      await logCompletion(environment, input, startedAt, classificationStage.attempts, 0, classificationStage.searchCalls, classificationStage.usage, result, telemetryContext);
       return result;
     }
 
@@ -404,7 +449,7 @@ export async function analyzeFactCheck(input: AnalysisInput) {
     const validated = factCheckResultSchema.safeParse(candidate);
     if (!validated.success) throw new Error("The trust engine produced an invalid result.");
 
-    logCompletion(
+    await logCompletion(
       environment,
       preparedInput,
       startedAt,
@@ -417,10 +462,35 @@ export async function analyzeFactCheck(input: AnalysisInput) {
         outputTokens: classificationStage.usage.outputTokens + researchStage.usage.outputTokens,
       },
       validated.data,
+      telemetryContext,
     );
     return validated.data;
   } catch (error) {
     if (error instanceof ConfigurationError || error instanceof FactCheckAnalysisError) throw error;
+    if (aiUsed) {
+      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      await recordAiUsage({
+        factCheckLogId: telemetryContext?.factCheckLogId,
+        userId: telemetryContext?.userId,
+        requestId: telemetryContext?.requestId,
+        model: environment.OPENAI_MODEL,
+        requestType: "fact_check",
+        stage: "analysis",
+        status: "failed",
+        latencyMs: Date.now() - startedAt,
+        timedOut,
+        errorCode: timedOut ? "AI_TIMEOUT" : "ANALYSIS_FAILED",
+      });
+      await recordError({
+        error,
+        type: "ai_error",
+        severity: "error",
+        endpoint: "/api/fact-check",
+        userId: telemetryContext?.userId,
+        requestId: telemetryContext?.requestId,
+        metadata: { stage: "analysis", timedOut },
+      });
+    }
     throw new FactCheckAnalysisError(
       "We could not complete this check after AI analysis started. This attempt counted toward your plan.",
       aiUsed,

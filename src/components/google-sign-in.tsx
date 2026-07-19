@@ -3,12 +3,15 @@
 import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { trackEvent } from "@/lib/telemetry/client";
 
 export function GoogleSignIn({ nextPath, configured }: { nextPath: string; configured: boolean }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function signIn() {
+    trackEvent("login_started", { provider: "google" });
+    trackEvent("signup_started", { provider: "google", intent: "authenticate" });
     const supabase = createBrowserSupabaseClient();
     if (!supabase) {
       setError("Supabase authentication is not configured yet.");
@@ -24,6 +27,7 @@ export function GoogleSignIn({ nextPath, configured }: { nextPath: string; confi
     });
 
     if (signInError) {
+      trackEvent("login_failed", { provider: "google" });
       setError("Google sign-in could not be started. Please try again.");
       setLoading(false);
     }

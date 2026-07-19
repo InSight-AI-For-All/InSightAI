@@ -23,6 +23,7 @@ const required = {
   },
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: { hint: "expected sb_publishable_...", validate: (value) => value.startsWith("sb_publishable_") || value.startsWith("eyJ") },
   SUPABASE_SERVICE_ROLE_KEY: { hint: "expected sb_secret_...", validate: (value) => value.startsWith("sb_secret_") || value.startsWith("eyJ") },
+  ADMIN_CRON_SECRET: { hint: "expected at least 32 random characters", validate: (value) => value.length >= 32 },
   OPENAI_API_KEY: { hint: "expected sk-...", validate: (value) => value.startsWith("sk-") },
   OPENAI_MODEL: { hint: "expected a model name", validate: (value) => value.length > 0 },
   STRIPE_SECRET_KEY: { hint: "expected sk_test_... or sk_live_...", validate: (value) => /^sk_(test|live)_/.test(value) },
@@ -30,6 +31,8 @@ const required = {
 };
 
 const optional = {
+  ALERT_WEBHOOK_URL: { hint: "expected an HTTPS URL when set", validate: (value) => !value || value.startsWith("https://") },
+  ALERT_WEBHOOK_SECRET: { hint: "expected at least 24 characters when set", validate: (value) => !value || value.length >= 24 },
   STRIPE_STARTER_PRICE_ID: { hint: "expected legacy price_... when set", validate: (value) => !value || value.startsWith("price_") },
   STRIPE_STARTER_399_PRICE_ID: { hint: "expected price_... when set", validate: (value) => !value || value.startsWith("price_") },
   STRIPE_PRO_PRICE_ID: { hint: "expected price_... when set", validate: (value) => !value || value.startsWith("price_") },

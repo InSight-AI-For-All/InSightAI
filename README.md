@@ -4,6 +4,8 @@ InSight AI is a mobile-first, evidence-assisted fact-checking SaaS foundation. S
 
 See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for the current launch status, verified checks, blockers, and release gate.
 
+See [OBSERVABILITY.md](OBSERVABILITY.md) for the internal admin command center, telemetry taxonomy, KPI definitions, privacy controls, alert scheduler, retention policy, and operator runbook.
+
 ## Private company documentation
 
 The internal company operating system lives locally in `.company/` and is intentionally excluded from Git. It contains confidential strategy, market, financial, legal-risk, operating, and institutional-memory documents. Team members must obtain it through the approved private company vault; never force-add, publish, paste into issues, or include it in support bundles. Start with `.company/README.md` after authorized access is provisioned.
@@ -49,6 +51,9 @@ Requirements: Node.js 22.12 or newer, npm, a Supabase project, an OpenAI API key
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | RLS-constrained Supabase publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Usage reservations, result persistence, and Stripe synchronization |
+| `ADMIN_CRON_SECRET` | Server only | Authenticates scheduled alert evaluation; use 32+ random characters |
+| `ALERT_WEBHOOK_URL` | Server only | Optional authenticated relay for incident changes |
+| `ALERT_WEBHOOK_SECRET` | Server only | Optional bearer secret sent to the incident relay |
 | `OPENAI_API_KEY` | Server only | AI requests from the fact-check API |
 | `OPENAI_MODEL` | Server only | Defaults to `gpt-5-nano` |
 | `STRIPE_SECRET_KEY` | Server only | Checkout, portal, and webhook API access |
@@ -178,6 +183,9 @@ NEXT_PUBLIC_APP_URL=https://insightaiforall.com
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
+ADMIN_CRON_SECRET=... # 32+ random characters
+ALERT_WEBHOOK_URL=... # optional HTTPS relay
+ALERT_WEBHOOK_SECRET=... # optional relay bearer secret
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5-nano
 STRIPE_SECRET_KEY=...

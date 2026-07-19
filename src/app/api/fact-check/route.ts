@@ -12,6 +12,14 @@ import {
 import { getErrorName, logServerError } from "@/lib/server-log";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  completeFactCheckLog,
+  recordApiRequest,
+  recordError,
+  recordPerformanceMetric,
+  recordTelemetryEvent,
+  startFactCheckLog,
+} from "@/lib/telemetry/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -48,6 +56,7 @@ function errorResponse(message: string, status: number, code: string, requestId:
 }
 
 async function handlePost(request: NextRequest, requestId: string) {
+  const requestStartedAt = Date.now();
   if (!isSameOriginRequest(request)) {
     return errorResponse("This request origin is not allowed.", 403, "INVALID_ORIGIN", requestId);
   }
@@ -100,6 +109,14 @@ async function handlePost(request: NextRequest, requestId: string) {
     idempotencyKey: formData.get("idempotencyKey"),
   });
   if (!submissionResult.success) {
+    await recordTelemetryEvent({
+      eventName: "input_validation_failed",
+      category: "product",
+      userId: user.id,
+      requestId,
+      metadata: { errorCode: "INVALID_INPUT" },
+    });
+    await recordApiRequest({ endpoint: "/api/fact-check", method: "POST", statusCode: 400, latencyMs: Date.now() - requestStartedAt, userId: user.id, requestId, errorType: "api_error", errorCode: "INVALID_INPUT" });
     return errorResponse(
       submissionResult.error.issues[0]?.message || "Check the submitted content.",
       400,
@@ -109,6 +126,31 @@ async function handlePost(request: NextRequest, requestId: string) {
   }
 
   const submission = submissionResult.data;
+  const rawSessionId = formData.get("telemetrySessionId");
+  const sessionId = typeof rawSessionId === "string" && /^[0-9a-f-]{36}$/i.test(rawSessionId) ? rawSessionId : null;
+  await recordTelemetryEvent({
+    eventName: "fact_check_started",
+    category: "product",
+    userId: user.id,
+    requestId,
+    context: { sessionId: sessionId || undefined, page: "/check" },
+    metadata: { inputType: submission.inputType },
+  });
+  await recordTelemetryEvent({
+    eventName: "input_validated",
+    category: "product",
+    userId: user.id,
+    requestId,
+    context: { sessionId: sessionId || undefined, page: "/check" },
+    metadata: { inputType: submission.inputType },
+  });
+  await recordTelemetryEvent({
+    eventName: submission.inputType === "text" ? "text_submitted" : submission.inputType === "link" ? "link_submitted" : "screenshot_uploaded",
+    category: "product",
+    userId: user.id,
+    requestId,
+    context: { sessionId: sessionId || undefined, page: "/check" },
+  });
   const image = formData.get("image");
   let imageBytes: Buffer | undefined;
   if (submission.inputType === "screenshot") {
@@ -123,20 +165,26 @@ async function handlePost(request: NextRequest, requestId: string) {
         requestId,
       );
     }
+    const uploadStartedAt = Date.now();
     imageBytes = Buffer.from(await image.arrayBuffer());
+    await recordPerformanceMetric({ metricName: "upload_latency", value: Date.now() - uploadStartedAt, route: "/api/fact-check", userId: user.id, context: { sessionId: sessionId || undefined }, metadata: { bytes: image.size } });
     if (!hasValidImageSignature(image.type, imageBytes)) {
       return errorResponse("The uploaded file does not match its image type.", 400, "INVALID_IMAGE_SIGNATURE", requestId);
     }
   }
 
+  const reservationStartedAt = Date.now();
   const { data: reservationData, error: reservationError } = await admin.rpc(
     "reserve_fact_check",
     { p_user_id: user.id, p_idempotency_key: submission.idempotencyKey },
   );
+  await recordPerformanceMetric({ metricName: "database_latency", value: Date.now() - reservationStartedAt, route: "/api/fact-check", userId: user.id, context: { sessionId: sessionId || undefined }, metadata: { operation: "reserve_fact_check" } });
   if (reservationError) return errorResponse("Usage could not be verified.", 500, "USAGE_ERROR", requestId);
 
   const reservation = reservationData as Reservation;
   if (!reservation.allowed) {
+    await recordTelemetryEvent({ eventName: "free_limit_reached", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType, used: reservation.used || 0, limit: reservation.limit || 0 } });
+    await recordApiRequest({ endpoint: "/api/fact-check", method: "POST", statusCode: 402, latencyMs: Date.now() - requestStartedAt, userId: user.id, requestId, sessionId, errorType: "api_error", errorCode: "LIMIT_REACHED" });
     return NextResponse.json(
       { error: "You have reached your plan limit.", code: "LIMIT_REACHED", ...reservation },
       { status: 402, headers: responseHeaders(requestId, { "X-RateLimit-Remaining": String(rateLimit.remaining) }) },
@@ -161,6 +209,15 @@ async function handlePost(request: NextRequest, requestId: string) {
     return errorResponse("A usage reservation could not be created.", 500, "USAGE_ERROR", requestId);
   }
 
+  const factCheckLogId = await startFactCheckLog({
+    userId: user.id,
+    requestId,
+    sessionId,
+    inputType: submission.inputType,
+    stage: "reserved",
+    reservationId: reservation.reservationId,
+  });
+
   const encoder = new TextEncoder();
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let streamOpen = true;
@@ -184,8 +241,13 @@ async function handlePost(request: NextRequest, requestId: string) {
           const imageDataUrl = image instanceof File && imageBytes && submission.inputType === "screenshot"
             ? `data:${image.type};base64,${imageBytes.toString("base64")}`
             : undefined;
-          const result = await analyzeFactCheck({ ...submission, imageDataUrl });
+          await recordTelemetryEvent({ eventName: "ai_request_started", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType } });
+          const result = await analyzeFactCheck(
+            { ...submission, imageDataUrl },
+            { userId: user.id, requestId, factCheckLogId },
+          );
           aiUsed = true;
+          const completionStartedAt = Date.now();
           const { data: factCheckId, error: completionError } = await admin.rpc(
             "complete_fact_check",
             {
@@ -198,7 +260,22 @@ async function handlePost(request: NextRequest, requestId: string) {
               p_result: result,
             },
           );
+          await recordPerformanceMetric({ metricName: "database_latency", value: Date.now() - completionStartedAt, route: "/api/fact-check", userId: user.id, context: { sessionId: sessionId || undefined }, metadata: { operation: "complete_fact_check" } });
           if (completionError) throw new Error("The result could not be saved.");
+          await completeFactCheckLog(factCheckLogId, {
+            factCheckId: factCheckId as string,
+            stage: "completed",
+            status: "completed",
+            durationMs: Date.now() - requestStartedAt,
+            category: result.category,
+            verdict: result.verdict,
+            truthScore: result.truthScore,
+            confidenceScore: result.confidenceScore,
+            metadata: { inputType: submission.inputType, sourceCount: result.methodology?.sourceCount || 0 },
+          });
+          await recordTelemetryEvent({ eventName: "result_generated", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType, category: result.category, verdict: result.verdict } });
+          await recordTelemetryEvent({ eventName: "fact_check_completed", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType, category: result.category, verdict: result.verdict } });
+          await recordApiRequest({ endpoint: "/api/fact-check", method: "POST", statusCode: 200, latencyMs: Date.now() - requestStartedAt, userId: user.id, requestId, sessionId, metadata: { inputType: submission.inputType } });
           send(`data: ${JSON.stringify({ factCheckId })}\n\n`);
         } catch (error) {
           const chargeAttempt = aiUsed || (error instanceof FactCheckAnalysisError && error.aiUsed);
@@ -214,6 +291,23 @@ async function handlePost(request: NextRequest, requestId: string) {
               errorName: accountingError.name,
             });
           }
+          const errorCode = error instanceof ConfigurationError
+            ? "NOT_CONFIGURED"
+            : error instanceof FactCheckAnalysisError
+              ? error.code
+              : "ANALYSIS_FAILED";
+          const stage = error instanceof FactCheckAnalysisError && !error.aiUsed ? "pre_ai" : "analysis";
+          await completeFactCheckLog(factCheckLogId, {
+            stage,
+            status: "failed",
+            durationMs: Date.now() - requestStartedAt,
+            errorCode,
+            errorReason: error instanceof Error ? error.message : "Unknown fact-check failure",
+            metadata: { inputType: submission.inputType, charged: chargeAttempt },
+          });
+          await recordTelemetryEvent({ eventName: "fact_check_failed", category: "product", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { inputType: submission.inputType, stage, errorCode, charged: chargeAttempt } });
+          await recordError({ error, type: error instanceof FactCheckAnalysisError ? "ai_error" : "api_error", severity: "error", endpoint: "/api/fact-check", userId: user.id, requestId, context: { sessionId: sessionId || undefined }, metadata: { stage, errorCode, charged: chargeAttempt } });
+          await recordApiRequest({ endpoint: "/api/fact-check", method: "POST", statusCode: error instanceof ConfigurationError ? 503 : 500, latencyMs: Date.now() - requestStartedAt, userId: user.id, requestId, sessionId, errorType: error instanceof FactCheckAnalysisError ? "ai_error" : "api_error", errorCode, metadata: { stage, charged: chargeAttempt } });
           if (error instanceof ConfigurationError) {
             send(`data: ${JSON.stringify({ error: error.message, code: "NOT_CONFIGURED", requestId })}\n\n`);
           } else if (error instanceof FactCheckAnalysisError) {
@@ -265,11 +359,14 @@ async function handlePost(request: NextRequest, requestId: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   const requestId = getRequestId(request);
   try {
     return await handlePost(request, requestId);
   } catch (error) {
     logServerError("fact_check.request_failed", { requestId, errorName: getErrorName(error) });
+    await recordError({ error, type: "api_error", severity: "critical", endpoint: "/api/fact-check", requestId });
+    await recordApiRequest({ endpoint: "/api/fact-check", method: "POST", statusCode: 500, latencyMs: Date.now() - startedAt, requestId, errorType: "api_error", errorCode: "INTERNAL_ERROR" });
     return errorResponse(
       "The check service encountered an unexpected error. Your usage was not charged. Please try again.",
       500,
